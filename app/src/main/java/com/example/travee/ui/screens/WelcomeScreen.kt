@@ -88,7 +88,7 @@ fun WelcomeScreen(navController: NavController) {
 
             // Login button
             OutlinedButton(
-                onClick = { /* TODO: Navigate to login */ },
+                onClick = { navController.navigate("login") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),

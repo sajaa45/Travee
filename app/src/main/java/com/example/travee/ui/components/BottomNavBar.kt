@@ -53,7 +53,7 @@ fun BottomNavBar(navController: NavController, selectedItem: Int) {
             selectedIcon = Icons.Filled.Favorite,
             unselectedIcon = Icons.Outlined.Favorite,
             contentDescription = "Favorites",
-            onClick = { /* TODO: Navigate to favorites */ }
+            onClick = { navController.navigate("favorites") }
         )
 
         BottomNavItem(
@@ -61,7 +61,7 @@ fun BottomNavBar(navController: NavController, selectedItem: Int) {
             selectedIcon = Icons.Filled.Person,
             unselectedIcon = Icons.Outlined.Person,
             contentDescription = "Profile",
-            onClick = { /* TODO: Navigate to profile */ }
+            onClick = { navController.navigate("profile") }
         )
     }
 }

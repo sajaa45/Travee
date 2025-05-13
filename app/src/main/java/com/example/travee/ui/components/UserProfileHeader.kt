@@ -41,7 +41,7 @@ fun UserProfileHeader(name: String) {
         }
 
         Image(
-            painter = painterResource(R.drawable.romantic_getaway_bro_1),
+            painter = painterResource(R.drawable.yoda),
             contentDescription = "Profile Image",
             modifier = Modifier
                 .size(48.dp)
