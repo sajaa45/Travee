@@ -34,6 +34,8 @@ import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.ktx.Firebase
+import com.example.travee.utils.NetworkUtils
+import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -310,7 +312,9 @@ fun SignupScreen(navController: NavController, auth: FirebaseAuth,
                 shape = RoundedCornerShape(8.dp)
             )
 
-            // Sign Up button
+            val context = LocalContext.current
+
+            // Signup button
             Button(
                 onClick = {
                     if (firstName.isBlank() || lastName.isBlank() || username.isBlank() ||
@@ -328,6 +332,15 @@ fun SignupScreen(navController: NavController, auth: FirebaseAuth,
                         errorMessage = "Password should be at least 6 characters"
                         return@Button
                     }
+
+                    // Check for network connection first
+                    if (!NetworkUtils.isNetworkAvailable(context)) {
+                        errorMessage = "No internet connection. Please check your network settings and try again."
+                        return@Button
+                    }
+
+                    // Log connection type for debugging
+                    Log.d("Signup", "Network type: ${NetworkUtils.getConnectionType(context)}")
 
                     isLoading = true
                     errorMessage = null
@@ -354,22 +367,25 @@ fun SignupScreen(navController: NavController, auth: FirebaseAuth,
                                         }
                                     }
                                     .addOnFailureListener { e ->
-                                        errorMessage = "Failed to save user data: ${e.message}"
+                                        errorMessage = when (e) {
+                                            is com.google.firebase.FirebaseNetworkException ->
+                                                "Network error while saving profile. Please check your connection."
+                                            else -> "Failed to save user data: ${e.message}"
+                                        }
                                         Log.e("Signup", "Error saving user data", e)
                                     }
                             } else {
                                 // Handle specific error cases
                                 errorMessage = when (val exception = task.exception) {
-                                    is FirebaseNetworkException -> "Network error. Please check your internet connection."
-                                    is FirebaseAuthException -> {
-                                        when (exception.errorCode) {
-                                            "ERROR_EMAIL_ALREADY_IN_USE" -> "Email already in use"
-                                            "ERROR_INVALID_EMAIL" -> "Invalid email format"
-                                            "ERROR_WEAK_PASSWORD" -> "Password is too weak"
-                                            else -> "Authentication failed: ${exception.message}"
-                                        }
-                                    }
-                                    else -> "Sign up failed: ${task.exception?.message}"
+                                    is com.google.firebase.FirebaseNetworkException ->
+                                        "Network error. Please check your internet connection."
+                                    is com.google.firebase.auth.FirebaseAuthUserCollisionException ->
+                                        "The email address is already in use by another account."
+                                    is com.google.firebase.auth.FirebaseAuthInvalidCredentialsException ->
+                                        "Invalid email format."
+                                    is com.google.firebase.auth.FirebaseAuthWeakPasswordException ->
+                                        "Password is too weak. It should be at least 6 characters."
+                                    else -> task.exception?.message ?: "Sign up failed. Please try again."
                                 }
                                 Log.e("Signup", "Signup error", task.exception)
                             }

@@ -29,6 +29,8 @@ import com.example.travee.R
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
+import com.example.travee.utils.NetworkUtils
+import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -185,6 +187,11 @@ fun LoginScreen(navController: NavController, auth: FirebaseAuth) {
             Spacer(modifier = Modifier.height(24.dp))
 
             // Login button
+            // Inside LoginScreen.kt: Modify the login button onClick function
+
+            val context = LocalContext.current
+
+            // When button is clicked
             Button(
                 onClick = {
                     if (email.isBlank() || password.isBlank()) {
@@ -192,8 +199,17 @@ fun LoginScreen(navController: NavController, auth: FirebaseAuth) {
                         return@Button
                     }
 
+                    // Check for network connection first
+                    if (!NetworkUtils.isNetworkAvailable(context)) {
+                        errorMessage = "No internet connection. Please check your network settings and try again."
+                        return@Button
+                    }
+
                     isLoading = true
                     errorMessage = null
+
+                    // Log connection type for debugging
+                    Log.d("Login", "Network type: ${NetworkUtils.getConnectionType(context)}")
 
                     auth.signInWithEmailAndPassword(email, password)
                         .addOnCompleteListener { task ->
@@ -204,7 +220,16 @@ fun LoginScreen(navController: NavController, auth: FirebaseAuth) {
                                     popUpTo("login") { inclusive = true }
                                 }
                             } else {
-                                errorMessage = task.exception?.message ?: "Login failed"
+                                // Handle specific error cases
+                                errorMessage = when (val exception = task.exception) {
+                                    is com.google.firebase.FirebaseNetworkException ->
+                                        "Network error. Please check your internet connection and try again."
+                                    is com.google.firebase.auth.FirebaseAuthInvalidUserException ->
+                                        "Account does not exist or has been disabled."
+                                    is com.google.firebase.auth.FirebaseAuthInvalidCredentialsException ->
+                                        "Invalid email or password."
+                                    else -> task.exception?.message ?: "Login failed. Please try again."
+                                }
                                 Log.e("Login", "Login error: ${task.exception}")
                             }
                         }

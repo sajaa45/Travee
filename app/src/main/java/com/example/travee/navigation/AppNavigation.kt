@@ -28,7 +28,7 @@ fun AppNavigation(auth: FirebaseAuth,
             ProfileScreen(navController = navController)
         }
         composable("home") {
-            HomeScreen(navController = navController)
+            HomeScreen(navController = navController, auth = auth, db = db)
         }
         composable("search") {
             SearchScreen(navController = navController)
