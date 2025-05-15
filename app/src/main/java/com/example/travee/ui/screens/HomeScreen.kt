@@ -32,6 +32,9 @@ import com.example.travee.ui.components.UserProfileHeader
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import java.text.SimpleDateFormat
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -255,18 +258,35 @@ fun HomeScreen(
                 )
             }
 
-
-
-
             // Search button
             Button(
                 onClick = {
-                    val budget = budgetInput.toFloatOrNull() ?: 0f
+                    val budget = budgetInput.toDoubleOrNull() ?: 0.0
+
+                    // Calculate trip duration in days
+                    val tripDays = if (startDate != null && endDate != null) {
+                        val diffInMillis = endDate!!.timeInMillis - startDate!!.timeInMillis
+                        (diffInMillis / (1000 * 60 * 60 * 24)).toInt() + 1 // +1 to include both start and end days
+                    } else {
+                        7 // Default to 7 days if no date range selected
+                    }
+
+                    // Format departure date for API
+                    val departDateFormatted = if (startDate != null) {
+                        val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+                        val localDate = startDate!!.toInstant().atZone(ZoneId.systemDefault()).toLocalDate()
+                        localDate.format(formatter)
+                    } else {
+                        // Default to today's date if no start date selected
+                        LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+                    }
+
+                    // Navigate to flight details with all required parameters
                     navController.navigate(
-                        "search?budget=$budget" +
-                                "&startDate=${startDate?.timeInMillis ?: 0}" +
-                                "&endDate=${endDate?.timeInMillis ?: 0}" +
-                                "&departure=$departureCity"
+                        "flight_details?budget=$budget" +
+                                "&departureCountry=${departureCity.lowercase()}" +
+                                "&tripDays=$tripDays" +
+                                "&departDate=$departDateFormatted"
                     )
                 },
                 modifier = Modifier
@@ -276,7 +296,8 @@ fun HomeScreen(
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF1EBFC3)
                 ),
-                shape = RoundedCornerShape(24.dp)
+                shape = RoundedCornerShape(24.dp),
+                enabled = budgetInput.isNotEmpty() && departureCity.isNotEmpty() && startDate != null
             ) {
                 Text(
                     text = "Search",

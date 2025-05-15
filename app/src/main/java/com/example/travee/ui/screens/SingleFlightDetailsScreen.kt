@@ -1,0 +1,737 @@
+package com.example.travee.ui.screens
+
+import android.util.Log
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.navigation.NavController
+import com.example.travee.R
+import com.example.travee.service.GroqApiService
+import com.example.travee.ui.components.BottomNavBar
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
+import java.util.*
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SingleFlightDetailsScreen(
+    navController: NavController,
+    destination: String,
+    destinationAirport: String,
+    destinationCountry: String,
+    price: Double,
+    airline: String,
+    departureAt: String,
+    returnAt: String,
+    link: String,
+    originCountry: String
+) {
+    var selectedTripType by remember { mutableStateOf("Round Trip") }
+    val uriHandler = LocalUriHandler.current
+    val scrollState = rememberScrollState()
+
+    // For activities dialog
+    var showActivitiesDialog by remember { mutableStateOf(false) }
+    var activitiesText by remember { mutableStateOf("") }
+    var isLoadingActivities by remember { mutableStateOf(false) }
+    val groqApiService = remember { GroqApiService() }
+    val coroutineScope = rememberCoroutineScope()
+
+    // Format dates for display
+    val departureTime = formatApiDateWithTime(departureAt)
+    val returnTime = formatApiDateWithTime(returnAt)
+
+    // Format dates for display in the date section
+    val departureDate = formatApiDateForDisplay(departureAt)
+    val returnDate = formatApiDateForDisplay(returnAt)
+
+    // Calculate trip duration in days
+    val tripDays = calculateTripDuration(departureAt, returnAt)
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.vector),
+                            contentDescription = "Flight",
+                            tint = Color.Black
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Flight Details",
+                            color = Color.Black,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { /* TODO: Open search */ }) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.search),
+                            contentDescription = "Search"
+                        )
+                    }
+                    IconButton(onClick = { /* TODO: Open settings */ }) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.filter),
+                            contentDescription = "Settings"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.White
+                )
+            )
+        },
+        bottomBar = { BottomNavBar(navController = navController, selectedItem = 0) }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(horizontal = 24.dp, vertical = 16.dp)
+                .verticalScroll(scrollState)
+        ) {
+            // Flight route information - Origin
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "From ${getOriginCode(originCountry)}",
+                        fontSize = 14.sp,
+                        color = Color.Gray
+                    )
+                    Text(
+                        text = getOriginCity(originCountry),
+                        fontSize = 24.sp,
+                        color = Color(0xFF1EBFC3),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    modifier = Modifier.padding(end = 16.dp)
+                ) {
+                    Text(
+                        text = departureTime,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            // Route line with arrows
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(2.dp)
+                        .height(40.dp)
+                        .background(Color.Gray)
+                        .padding(start = 24.dp)
+                )
+
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.swap__1_),
+                        contentDescription = "Up",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Icon(
+                        painter = painterResource(id = R.drawable.swap),
+                        contentDescription = "Down",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            // Destination information
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "To $destinationAirport",
+                        fontSize = 14.sp,
+                        color = Color.Gray
+                    )
+                    Text(
+                        text = "$destination, $destinationCountry",
+                        fontSize = 24.sp,
+                        color = Color(0xFF1EBFC3),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    modifier = Modifier.padding(end = 16.dp)
+                ) {
+                    Text(
+                        text = returnTime,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Trip type selection
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Button(
+                    onClick = { selectedTripType = "One Way" },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (selectedTripType == "One Way") Color(0xFF1EBFC3) else Color.Gray.copy(alpha = 0.2f),
+                        contentColor = if (selectedTripType == "One Way") Color.White else Color.Black
+                    ),
+                    shape = RoundedCornerShape(24.dp)
+                ) {
+                    Text("One Way")
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Button(
+                    onClick = { selectedTripType = "Round Trip" },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (selectedTripType == "Round Trip") Color(0xFF1EBFC3) else Color.Gray.copy(alpha = 0.2f),
+                        contentColor = if (selectedTripType == "Round Trip") Color.White else Color.Black
+                    ),
+                    shape = RoundedCornerShape(24.dp)
+                ) {
+                    Text("Round Trip")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Date information
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        text = "Depart",
+                        fontSize = 14.sp,
+                        color = Color.Gray
+                    )
+                    Text(
+                        text = departureDate,
+                        fontSize = 16.sp,
+                        color = Color(0xFF1EBFC3),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "Arrive",
+                        fontSize = 14.sp,
+                        color = Color.Gray
+                    )
+                    Text(
+                        text = returnDate,
+                        fontSize = 16.sp,
+                        color = Color(0xFF1EBFC3),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Airline information
+            Column {
+                Text(
+                    text = "Airline",
+                    fontSize = 14.sp,
+                    color = Color.Gray
+                )
+                Text(
+                    text = airline,
+                    fontSize = 16.sp,
+                    color = Color(0xFF1EBFC3),
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Price information
+            Column {
+                Text(
+                    text = "Price",
+                    fontSize = 14.sp,
+                    color = Color.Gray
+                )
+                Text(
+                    text = "$price TND",
+                    fontSize = 20.sp,
+                    color = Color(0xFF1EBFC3),
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // Book flight button
+            Button(
+                onClick = {
+                    try {
+                        uriHandler.openUri(link)
+                    } catch (e: Exception) {
+                        Log.e("FlightDetails", "Error opening booking link", e)
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF1EBFC3)
+                ),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text(
+                    text = "Book Flight",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Activities button - NEW
+            Button(
+                onClick = {
+                    showActivitiesDialog = true
+                    isLoadingActivities = true
+
+                    coroutineScope.launch {
+                        try {
+                            // Clean the destination string to avoid special characters
+                            val cleanDestination = destination.replace(",", "")
+                            val cleanCountry = destinationCountry.replace(",", "")
+
+                            // Get activities for the destination country
+                            activitiesText = groqApiService.getActivityRecommendations(
+                                destination = "$cleanDestination, $cleanCountry",
+                                budget = price * 0.3, // Allocate 30% of flight price for activities
+                                days = tripDays
+                            )
+                        } catch (e: Exception) {
+                            Log.e("FlightDetails", "Error loading activities", e)
+                            activitiesText = "Failed to load activities: ${e.message}\n\n" +
+                                    "• Visit local landmarks and historical sites\n" +
+                                    "• Try local cuisine at affordable restaurants\n" +
+                                    "• Explore parks and natural attractions"
+                        } finally {
+                            isLoadingActivities = false
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF4A6572)
+                ),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.LocationOn,
+                        contentDescription = "Activities",
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Things to Do in $destination",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Traveler information
+            Column {
+                Text(
+                    text = "Traveller & Class",
+                    fontSize = 14.sp,
+                    color = Color.Gray
+                )
+                Text(
+                    text = "1, Economy/Premium Economy",
+                    fontSize = 16.sp,
+                    color = Color(0xFF1EBFC3),
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+
+    // Activities Dialog
+    if (showActivitiesDialog) {
+        Dialog(onDismissRequest = { showActivitiesDialog = false }) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 500.dp), // Set maximum height
+                shape = RoundedCornerShape(16.dp),
+                color = Color.White,
+                shadowElevation = 8.dp
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Header with gradient background (fixed)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
+                                    colors = listOf(
+                                        Color(0xFF1EBFC3),
+                                        Color(0xFF0A9396)
+                                    )
+                                )
+                            )
+                            .padding(horizontal = 24.dp, vertical = 16.dp)
+                    ) {
+                        Column {
+                            Text(
+                                text = "Things to Do in $destination",
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Text(
+                                text = "Budget-friendly activities for your $tripDays-day trip:",
+                                fontSize = 14.sp,
+                                color = Color.White.copy(alpha = 0.9f)
+                            )
+                        }
+                    }
+
+                    // Scrollable content area
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
+                        if (isLoadingActivities) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .fillMaxHeight(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    CircularProgressIndicator(
+                                        color = Color(0xFF1EBFC3)
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        text = "Finding the best activities...",
+                                        color = Color.Gray
+                                    )
+                                }
+                            }
+                        } else {
+                            // Parse the bullet points for better display
+                            val activities = activitiesText.split("\n").filter { it.trim().startsWith("•") || it.trim().startsWith("-") }
+
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(horizontal = 24.dp, vertical = 16.dp)
+                            ) {
+                                activities.forEachIndexed { index, activity ->
+                                    ActivityItem(activity = activity.trim())
+
+                                    if (index < activities.size - 1) {
+                                        Divider(
+                                            modifier = Modifier.padding(vertical = 12.dp),
+                                            color = Color.LightGray.copy(alpha = 0.5f)
+                                        )
+                                    }
+                                }
+
+                                // If no activities were parsed, show the raw text
+                                if (activities.isEmpty()) {
+                                    Text(
+                                        text = activitiesText,
+                                        fontSize = 16.sp,
+                                        lineHeight = 24.sp,
+                                        modifier = Modifier.padding(vertical = 8.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Close button (fixed at bottom)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.White)
+                            .padding(horizontal = 24.dp, vertical = 16.dp)
+                    ) {
+                        Button(
+                            onClick = { showActivitiesDialog = false },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF1EBFC3)
+                            ),
+                            shape = RoundedCornerShape(28.dp)
+                        ) {
+                            Text(
+                                text = "Close",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Add this composable function at the end of the file, outside the SingleFlightDetailsScreen function
+@Composable
+private fun ActivityItem(activity: String) {
+    val activityText = activity.replace("•", "").replace("-", "").trim()
+    val costPattern = Regex("\$$(\\d+[-–]\\d+|\\d+)\\s*TND\$$")
+    val costMatch = costPattern.find(activityText)
+
+    val mainText = if (costMatch != null) {
+        activityText.substring(0, costMatch.range.first).trim()
+    } else {
+        activityText
+    }
+
+    val costText = costMatch?.groupValues?.get(0) ?: ""
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        // Icon based on activity type
+        val icon = when {
+            activityText.lowercase().contains("garden") ||
+                    activityText.lowercase().contains("park") -> painterResource(id = R.drawable.location_on)
+            activityText.lowercase().contains("museum") ||
+                    activityText.lowercase().contains("visit") -> painterResource(id = R.drawable.search)
+            activityText.lowercase().contains("walk") ||
+                    activityText.lowercase().contains("tour") -> painterResource(id = R.drawable.vector)
+            activityText.lowercase().contains("market") ||
+                    activityText.lowercase().contains("shop") -> painterResource(id = R.drawable.filter)
+            else -> painterResource(id = R.drawable.location_on)
+        }
+
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .background(Color(0xFF1EBFC3).copy(alpha = 0.15f), CircleShape)
+                .padding(8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = icon,
+                contentDescription = null,
+                tint = Color(0xFF1EBFC3),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(16.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = mainText,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                lineHeight = 22.sp
+            )
+
+            if (costText.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = costText,
+                    fontSize = 14.sp,
+                    color = Color(0xFF1EBFC3),
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
+// Helper function to calculate trip duration in days
+private fun calculateTripDuration(departureAt: String, returnAt: String): Int {
+    return try {
+        if (departureAt.contains("T") && returnAt.contains("T")) {
+            val departFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
+            val returnFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
+
+            val departDate = LocalDate.parse(departureAt.split("T")[0])
+            val returnDate = LocalDate.parse(returnAt.split("T")[0])
+
+            val days = ChronoUnit.DAYS.between(departDate, returnDate).toInt() + 1
+            days.coerceAtLeast(1)
+        } else {
+            // Simple date format
+            val departFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+            val returnFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+
+            val departDate = LocalDate.parse(departureAt, departFormat)
+            val returnDate = LocalDate.parse(returnAt, returnFormat)
+
+            val days = ChronoUnit.DAYS.between(departDate, returnDate).toInt() + 1
+            days.coerceAtLeast(1)
+        }
+    } catch (e: Exception) {
+        Log.e("FlightDetails", "Error calculating trip duration: $e")
+        3 // Default to 3 days if calculation fails
+    }
+}
+
+// Helper function to format API dates with time
+private fun formatApiDateWithTime(dateString: String): String {
+    return try {
+        if (dateString.contains("T")) {
+            // Parse ISO format
+            val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+            val outputFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+            val date = inputFormat.parse(dateString)
+            outputFormat.format(date!!)
+        } else {
+            // If no time information, return empty string
+            ""
+        }
+    } catch (e: Exception) {
+        Log.e("FlightDetails", "Error formatting date with time: $dateString", e)
+        ""
+    }
+}
+
+// Helper function to format API dates for display
+private fun formatApiDateForDisplay(dateString: String): String {
+    return try {
+        if (dateString.contains("T")) {
+            // Parse ISO format
+            val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+            val outputFormat = SimpleDateFormat("EEE, MMM dd", Locale.getDefault())
+            val date = inputFormat.parse(dateString)
+            outputFormat.format(date!!)
+        } else {
+            // Parse simple date format
+            val inputFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            val outputFormat = SimpleDateFormat("EEE, MMM dd", Locale.getDefault())
+            val date = inputFormat.parse(dateString)
+            outputFormat.format(date!!)
+        }
+    } catch (e: Exception) {
+        Log.e("FlightDetails", "Error formatting date for display: $dateString", e)
+        dateString
+    }
+}
+
+// Helper function to get origin city name from country
+private fun getOriginCity(originCountry: String): String {
+    return when (originCountry.lowercase()) {
+        "tunisia" -> "Tunis"
+        "france" -> "Paris"
+        "italy" -> "Rome"
+        "germany" -> "Frankfurt"
+        "spain" -> "Madrid"
+        else -> originCountry.capitalize()
+    }
+}
+
+// Helper function to get origin airport code from country
+private fun getOriginCode(originCountry: String): String {
+    return when (originCountry.lowercase()) {
+        "tunisia" -> "TUN"
+        "france" -> "CDG"
+        "italy" -> "FCO"
+        "germany" -> "FRA"
+        "spain" -> "MAD"
+        else -> "???"
+    }
+}
+
+// Extension function to capitalize first letter
+private fun String.capitalize(): String {
+    return this.replaceFirstChar {
+        if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString()
+    }
+}
