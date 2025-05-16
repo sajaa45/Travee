@@ -1,4 +1,4 @@
-package com.example.travee.model
+package com.example.travee.data.models
 
 data class FavoriteFlight(
     val id: String = "", // Firestore document ID

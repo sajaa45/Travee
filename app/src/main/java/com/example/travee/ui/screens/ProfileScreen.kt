@@ -30,7 +30,8 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.example.travee.model.UserProfile
+import com.example.travee.data.ThemeManager
+import com.example.travee.data.models.UserProfile
 import com.example.travee.ui.components.BottomNavBar
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.UserProfileChangeRequest
@@ -43,7 +44,8 @@ import kotlinx.coroutines.tasks.await
 fun ProfileScreen(
     navController: NavController,
     auth: FirebaseAuth = FirebaseAuth.getInstance(),
-    db: FirebaseFirestore = FirebaseFirestore.getInstance()
+    db: FirebaseFirestore = FirebaseFirestore.getInstance(),
+    themeManager: ThemeManager = ThemeManager.getInstance()
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -56,12 +58,18 @@ fun ProfileScreen(
     var showAvatarDialog by remember { mutableStateOf(false) }
     var showLogoutConfirmation by remember { mutableStateOf(false) }
 
+    // Theme state
+    val isDarkTheme by themeManager.isDarkTheme.collectAsState()
+
     // Load user profile when screen loads
     LaunchedEffect(key1 = auth.currentUser?.uid) {
         if (auth.currentUser != null) {
             loadUserProfile(auth, db) { profile ->
                 userProfile = profile
                 isLoading = false
+
+                // Sync theme with user profile
+                themeManager.setDarkTheme(profile.darkModeEnabled)
             }
         } else {
             // Not logged in, navigate to login screen
@@ -120,10 +128,11 @@ fun ProfileScreen(
                     }
 
                     // Profile picture - positioned to overlap the header and content
+                    // IMPROVED: Increased size and fixed camera icon positioning
                     Box(
                         modifier = Modifier
-                            .offset(y = (-50).dp)
-                            .size(100.dp)
+                            .offset(y = (-70).dp)
+                            .size(140.dp)
                             .clip(CircleShape)
                             .background(Color.White)
                             .border(width = 4.dp, color = Color.White, shape = CircleShape)
@@ -135,8 +144,7 @@ fun ProfileScreen(
                         // Profile image
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
-                                .data(userProfile?.photoUrl.takeIf { !it.isNullOrEmpty() }
-                                    ?: userProfile?.getAvatarUrl())
+                                .data(userProfile?.getAvatarUrl())
                                 .crossfade(true)
                                 .build(),
                             contentDescription = "Profile Picture",
@@ -146,50 +154,35 @@ fun ProfileScreen(
                             contentScale = ContentScale.Crop
                         )
 
-                        // Camera icon overlay
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF1EBFC3))
-                                .padding(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CameraAlt,
-                                contentDescription = "Change Photo",
-                                tint = Color.White,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+
                     }
 
-                    // User name
+                    // User name - adjusted offset to account for larger profile picture
                     Text(
                         text = userProfile?.getFullName() ?: "User",
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier
                             .padding(top = 8.dp)
-                            .offset(y = (-40).dp)
+                            .offset(y = (-50).dp)  // Adjusted offset
                     )
 
-                    // User email
+                    // User email - adjusted offset to account for larger profile picture
                     Text(
                         text = userProfile?.email ?: "",
                         fontSize = 16.sp,
                         color = Color.Gray,
                         modifier = Modifier
                             .padding(bottom = 16.dp)
-                            .offset(y = (-40).dp)
+                            .offset(y = (-50).dp)  // Adjusted offset
                     )
 
-                    // Edit profile button
+                    // Edit profile button - adjusted offset to account for larger profile picture
                     Button(
                         onClick = { showEditProfileDialog = true },
                         modifier = Modifier
                             .padding(horizontal = 16.dp)
-                            .offset(y = (-30).dp)
+                            .offset(y = (-40).dp)  // Adjusted offset
                             .fillMaxWidth()
                             .height(48.dp),
                         colors = ButtonDefaults.buttonColors(
@@ -206,15 +199,15 @@ fun ProfileScreen(
                         Text("Edit Profile")
                     }
 
-                    // Profile content
+                    // Profile content - adjusted offset to account for larger profile picture
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(16.dp)
-                            .offset(y = (-20).dp),
+                            .offset(y = (-30).dp),  // Adjusted offset
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = Color.White
+                            containerColor = MaterialTheme.colorScheme.surface
                         ),
                         elevation = CardDefaults.cardElevation(
                             defaultElevation = 4.dp
@@ -279,11 +272,57 @@ fun ProfileScreen(
 
                             Divider(modifier = Modifier.padding(vertical = 8.dp))
 
-                            ProfileMenuItem(
-                                icon = Icons.Outlined.DarkMode,
-                                title = "Theme",
-                                subtitle = if (userProfile?.darkModeEnabled == true) "Dark Mode" else "Light Mode"
-                            )
+                            // Dark Mode Toggle
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.DarkMode,
+                                    contentDescription = "Dark Mode",
+                                    tint = Color(0xFF1EBFC3),
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .padding(end = 4.dp)
+                                )
+
+                                Spacer(modifier = Modifier.width(16.dp))
+
+                                Column(
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = "Dark Mode",
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+
+                                    Text(
+                                        text = if (isDarkTheme) "Enabled" else "Disabled",
+                                        fontSize = 14.sp,
+                                        color = Color.Gray
+                                    )
+                                }
+
+                                Switch(
+                                    checked = isDarkTheme,
+                                    onCheckedChange = { isChecked ->
+                                        // Toggle dark mode
+                                        themeManager.setDarkTheme(isChecked)
+
+                                        // Update user profile
+                                        coroutineScope.launch {
+                                            userProfile?.let { profile ->
+                                                val updatedProfile = profile.copy(darkModeEnabled = isChecked)
+                                                updateUserProfile(auth, db, updatedProfile)
+                                                userProfile = updatedProfile
+                                            }
+                                        }
+                                    }
+                                )
+                            }
 
                             Divider(modifier = Modifier.padding(vertical = 8.dp))
 
@@ -303,13 +342,13 @@ fun ProfileScreen(
                         }
                     }
 
-                    // Logout button
+                    // Logout button - adjusted offset to account for larger profile picture
                     Button(
                         onClick = { showLogoutConfirmation = true },
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 8.dp)
-                            .offset(y = (-10).dp)
+                            .offset(y = (-20).dp)  // Adjusted offset
                             .height(56.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF4A6572)
@@ -379,32 +418,32 @@ fun ProfileScreen(
                         .fillMaxWidth()
                         .padding(vertical = 8.dp)
                 ) {
-                    // Option 1: Use generated avatar
+                    // Option 1: Use default Yoda image
                     ListItem(
-                        headlineContent = { Text("Use generated avatar") },
-                        supportingContent = { Text("Create an avatar based on your name") },
+                        headlineContent = { Text("Use default Yoda image") },
+                        supportingContent = { Text("Reset to the default profile image") },
                         leadingContent = {
                             Icon(
                                 imageVector = Icons.Default.Person,
-                                contentDescription = "Generated Avatar",
+                                contentDescription = "Default Image",
                                 tint = Color(0xFF1EBFC3)
                             )
                         },
                         modifier = Modifier.clickable {
                             coroutineScope.launch {
                                 try {
-                                    // Generate avatar URL based on name
-                                    val avatarUrl = userProfile?.getAvatarUrl() ?: ""
+                                    // Use default Yoda image URL
+                                    val yodaImageUrl ="https://i.ebayimg.com/images/g/AxUAAOSw0t9f26n8/s-l1200.jpg"
 
-                                    // Update profile with avatar URL
-                                    updateProfilePhotoUrl(auth, db, avatarUrl)
+                                    // Update profile with Yoda image URL
+                                    updateProfilePhotoUrl(auth, db, yodaImageUrl)
 
                                     // Refresh user profile
                                     loadUserProfile(auth, db) { profile ->
                                         userProfile = profile
                                     }
 
-                                    Toast.makeText(context, "Avatar updated", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Profile photo updated", Toast.LENGTH_SHORT).show()
                                     showAvatarDialog = false
                                 } catch (e: Exception) {
                                     Log.e("ProfileScreen", "Error updating avatar", e)
@@ -415,6 +454,7 @@ fun ProfileScreen(
                     )
 
                     Divider()
+
 
                     // Option 2: Enter URL
                     ListItem(
@@ -768,8 +808,10 @@ private suspend fun loadUserProfile(
 
             onComplete(userProfile)
         } else {
-            // Create a new user profile
-            val newProfile = createDefaultUserProfile(user)
+            // Create a new user profile with default Yoda image
+            val newProfile = createDefaultUserProfile(user).copy(
+                photoUrl = "https://i.imgur.com/7Kky3Vu.jpg" // Default Yoda image
+            )
 
             // Save to Firestore
             db.collection("users")
@@ -800,7 +842,7 @@ private fun createDefaultUserProfile(user: com.google.firebase.auth.FirebaseUser
         firstName = firstName,
         lastName = lastName,
         email = user.email ?: "",
-        photoUrl = user.photoUrl?.toString() ?: "",
+        photoUrl = user.photoUrl?.toString() ?: "https://i.imgur.com/7Kky3Vu.jpg", // Default Yoda image
         phoneNumber = user.phoneNumber ?: ""
     )
 }

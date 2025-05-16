@@ -1,5 +1,6 @@
 package com.example.travee.service
 
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -7,6 +8,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 
 class SkyScannerApiService {
 
@@ -152,13 +154,40 @@ class SkyScannerApiService {
     ): List<FlightResult> = withContext(Dispatchers.IO) {
         val origin = countryToAirport[originCountry.lowercase()] ?: "TUN" // Default to Tunis
 
+        // Validate and parse the departure date
         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-        val depart = LocalDate.parse(departDate, formatter)
-        val returnDate = depart.plusDays(days.toLong()).format(formatter)
+        val validDepartDate = try {
+            // Log the received departure date for debugging
+            Log.d("SkyScannerAPI", "Received departure date: $departDate")
+
+            // Parse the date to validate it
+            val parsedDate = LocalDate.parse(departDate, formatter)
+
+            // Format it back to ensure consistent format
+            parsedDate.format(formatter)
+        } catch (e: DateTimeParseException) {
+            // If parsing fails, log the error and use today's date as fallback
+            Log.e("SkyScannerAPI", "Error parsing departure date: $departDate", e)
+            LocalDate.now().format(formatter)
+        }
+
+        // Calculate return date based on the validated departure date
+        val returnDate = try {
+            val parsedDepartDate = LocalDate.parse(validDepartDate, formatter)
+            parsedDepartDate.plusDays(days.toLong()).format(formatter)
+        } catch (e: Exception) {
+            // Fallback if calculation fails
+            Log.e("SkyScannerAPI", "Error calculating return date", e)
+            LocalDate.now().plusDays(days.toLong()).format(formatter)
+        }
+
+        Log.d("SkyScannerAPI", "Using departure date: $validDepartDate, return date: $returnDate")
 
         try {
             val urlStr = "https://api.travelpayouts.com/aviasales/v3/prices_for_dates" +
-                    "?origin=$origin&currency=tnd&depart_date=$departDate&return_date=$returnDate&trip_class=0&token=bb77b690cfa4857ad0a39521cb7bcc19"
+                    "?origin=$origin&currency=tnd&depart_date=$validDepartDate&return_date=$returnDate&trip_class=0&token=bb77b690cfa4857ad0a39521cb7bcc19"
+
+            Log.d("SkyScannerAPI", "API URL: $urlStr")
 
             val url = URL(urlStr)
             val conn = url.openConnection() as HttpURLConnection
@@ -172,9 +201,12 @@ class SkyScannerApiService {
             val results = mutableListOf<FlightResult>()
             if (data.has("data")) {
                 val flights = data.getJSONArray("data")
+                Log.d("SkyScannerAPI", "Received ${flights.length()} flights from API")
+
                 for (i in 0 until flights.length()) {
                     val flight = flights.getJSONObject(i)
                     val price = flight.optDouble("price", 0.0)
+
                     if (price > 0 && price <= budget) {
                         val destinationAirport = flight.optString("destination_airport", "Unknown")
 
@@ -191,6 +223,28 @@ class SkyScannerApiService {
                         // Format destination as "City, Country"
                         val formattedDestination = "$city, $country"
 
+                        // Get departure date from API response or use our validated date if missing
+                        val flightDepartureAt = flight.optString("departure_at", null)
+                        val actualDepartureAt = if (flightDepartureAt.isNullOrEmpty()) {
+                            // If API doesn't return a departure date, use our validated date
+                            "${validDepartDate}T12:00:00" // Add default time
+                        } else {
+                            // Use the date from API response
+                            flightDepartureAt
+                        }
+
+                        // Get return date from API response or use our calculated return date
+                        val flightReturnAt = flight.optString("return_at", null)
+                        val actualReturnAt = if (flightReturnAt.isNullOrEmpty()) {
+                            // If API doesn't return a return date, use our calculated date
+                            "${returnDate}T12:00:00" // Add default time
+                        } else {
+                            // Use the date from API response
+                            flightReturnAt
+                        }
+
+                        Log.d("SkyScannerAPI", "Flight to $city: departure=$actualDepartureAt, return=$actualReturnAt")
+
                         // Prioritize preferred airlines
                         if (airlineName in preferredAirlines) {
                             results.add(
@@ -201,23 +255,29 @@ class SkyScannerApiService {
                                     formattedDestination = formattedDestination,
                                     price = price,
                                     airline = airlineName,
-                                    departureAt = flight.optString("departure_at", departDate),
-                                    returnAt = returnDate,
+                                    departureAt = actualDepartureAt,
+                                    returnAt = actualReturnAt,
                                     link = "https://www.aviasales.com" + flight.optString("link", "")
                                 )
                             )
                         }
                     }
                 }
+            } else {
+                Log.d("SkyScannerAPI", "No data field in API response")
             }
 
             // Sort by price and prioritize Tunisian airlines
-            results.sortedWith(compareBy(
+            val sortedResults = results.sortedWith(compareBy(
                 { if (it.airline.startsWith("Tunis")) 0 else 1 }, // Tunisian airlines first
                 { it.price } // Then by price
             ))
+
+            Log.d("SkyScannerAPI", "Returning ${sortedResults.size} flight results")
+            sortedResults
         } catch (e: Exception) {
-            // If API fails, return empty list
+            // If API fails, log the error and return empty list
+            Log.e("SkyScannerAPI", "Error searching flights", e)
             emptyList()
         }
     }

@@ -34,7 +34,7 @@ fun SearchScreen(navController: NavController) {
                 .padding(horizontal = 24.dp, vertical = 16.dp)
         ) {
             // User profile header
-            UserProfileHeader(name = "Hazar")
+            UserProfileHeader()
 
             Spacer(modifier = Modifier.height(16.dp))
 

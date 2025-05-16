@@ -8,17 +8,21 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -35,7 +39,6 @@ import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.ktx.Firebase
 import com.example.travee.utils.NetworkUtils
-import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,7 +56,82 @@ fun SignupScreen(navController: NavController, auth: FirebaseAuth,
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val scrollState = rememberScrollState()
+    val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
 
+    // Function to handle signup
+    fun performSignup() {
+        if (firstName.isBlank() || lastName.isBlank() || username.isBlank() ||
+            email.isBlank() || password.isBlank() || confirmPassword.isBlank()) {
+            errorMessage = "Please fill in all fields"
+            return
+        }
+
+        if (password != confirmPassword) {
+            errorMessage = "Passwords don't match"
+            return
+        }
+
+        if (password.length < 6) {
+            errorMessage = "Password should be at least 6 characters"
+            return
+        }
+
+        // Check for network connection first
+        if (!NetworkUtils.isNetworkAvailable(context)) {
+            errorMessage = "No internet connection. Please check your network settings and try again."
+            return
+        }
+
+        isLoading = true
+        errorMessage = null
+
+        auth.createUserWithEmailAndPassword(email, password)
+            .addOnCompleteListener { task ->
+                isLoading = false
+                if (task.isSuccessful) {
+                    // Store additional user data in Firestore
+                    val user = hashMapOf(
+                        "firstName" to firstName,
+                        "lastName" to lastName,
+                        "username" to username,
+                        "email" to email,
+                        "createdAt" to FieldValue.serverTimestamp()
+                    )
+
+                    db.collection("users")
+                        .document(auth.currentUser?.uid ?: "")
+                        .set(user)
+                        .addOnSuccessListener {
+                            navController.navigate("home") {
+                                popUpTo("signup") { inclusive = true }
+                            }
+                        }
+                        .addOnFailureListener { e ->
+                            errorMessage = when (e) {
+                                is com.google.firebase.FirebaseNetworkException ->
+                                    "Network error while saving profile. Please check your connection."
+                                else -> "Failed to save user data: ${e.message}"
+                            }
+                            Log.e("Signup", "Error saving user data", e)
+                        }
+                } else {
+                    // Handle specific error cases
+                    errorMessage = when (val exception = task.exception) {
+                        is com.google.firebase.FirebaseNetworkException ->
+                            "Network error. Please check your internet connection."
+                        is com.google.firebase.auth.FirebaseAuthUserCollisionException ->
+                            "The email address is already in use by another account."
+                        is com.google.firebase.auth.FirebaseAuthInvalidCredentialsException ->
+                            "Invalid email format."
+                        is com.google.firebase.auth.FirebaseAuthWeakPasswordException ->
+                            "Password is too weak. It should be at least 6 characters."
+                        else -> task.exception?.message ?: "Sign up failed. Please try again."
+                    }
+                    Log.e("Signup", "Signup error", task.exception)
+                }
+            }
+    }
 
     Box(
         modifier = Modifier
@@ -114,27 +192,21 @@ fun SignupScreen(navController: NavController, auth: FirebaseAuth,
             // First Name field
             OutlinedTextField(
                 value = firstName,
-                onValueChange = { firstName = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
+                onValueChange = { firstName = it.replace("\n", "") },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                 placeholder = { Text("First Name", color = Color.White.copy(alpha = 0.6f)) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = "First Name",
-                        tint = Color(0xFF1EBFC3)
-                    )
-                },
+                leadingIcon = { Icon(Icons.Default.Person, "First Name", tint = Color(0xFF1EBFC3)) },
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Text,
                     imeAction = ImeAction.Next
                 ),
+                keyboardActions = KeyboardActions(
+                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                ),
+                singleLine = true,
                 colors = TextFieldDefaults.outlinedTextFieldColors(
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    containerColor = Color(0xFF0A2533),
-                    unfocusedBorderColor = Color(0xFF1EBFC3).copy(alpha = 0.5f),
+                    focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                    containerColor = Color(0xFF0A2533), unfocusedBorderColor = Color(0xFF1EBFC3).copy(alpha = 0.5f),
                     focusedBorderColor = Color(0xFF1EBFC3)
                 ),
                 shape = RoundedCornerShape(8.dp)
@@ -143,56 +215,44 @@ fun SignupScreen(navController: NavController, auth: FirebaseAuth,
             // Last Name field
             OutlinedTextField(
                 value = lastName,
-                onValueChange = { lastName = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
+                onValueChange = { lastName = it.replace("\n", "") },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                 placeholder = { Text("Last Name", color = Color.White.copy(alpha = 0.6f)) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = "Last Name",
-                        tint = Color(0xFF1EBFC3)
-                    )
-                },
+                leadingIcon = { Icon(Icons.Default.Person, "Last Name", tint = Color(0xFF1EBFC3)) },
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Text,
                     imeAction = ImeAction.Next
                 ),
+                keyboardActions = KeyboardActions(
+                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                ),
+                singleLine = true,
                 colors = TextFieldDefaults.outlinedTextFieldColors(
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    containerColor = Color(0xFF0A2533),
-                    unfocusedBorderColor = Color(0xFF1EBFC3).copy(alpha = 0.5f),
+                    focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                    containerColor = Color(0xFF0A2533), unfocusedBorderColor = Color(0xFF1EBFC3).copy(alpha = 0.5f),
                     focusedBorderColor = Color(0xFF1EBFC3)
                 ),
                 shape = RoundedCornerShape(8.dp)
             )
 
-            // Username
+            // Username field
             OutlinedTextField(
                 value = username,
-                onValueChange = { username = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
+                onValueChange = { username = it.replace("\n", "") },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                 placeholder = { Text("Username", color = Color.White.copy(alpha = 0.6f)) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = "Username",
-                        tint = Color(0xFF1EBFC3)
-                    )
-                },
+                leadingIcon = { Icon(Icons.Default.Person, "Username", tint = Color(0xFF1EBFC3)) },
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Text,
                     imeAction = ImeAction.Next
                 ),
+                keyboardActions = KeyboardActions(
+                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                ),
+                singleLine = true,
                 colors = TextFieldDefaults.outlinedTextFieldColors(
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    containerColor = Color(0xFF0A2533),
-                    unfocusedBorderColor = Color(0xFF1EBFC3).copy(alpha = 0.5f),
+                    focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                    containerColor = Color(0xFF0A2533), unfocusedBorderColor = Color(0xFF1EBFC3).copy(alpha = 0.5f),
                     focusedBorderColor = Color(0xFF1EBFC3)
                 ),
                 shape = RoundedCornerShape(8.dp)
@@ -201,28 +261,21 @@ fun SignupScreen(navController: NavController, auth: FirebaseAuth,
             // Email field
             OutlinedTextField(
                 value = email,
-                onValueChange = { email = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                placeholder = { Text(text="Email",
-                    color = Color.White.copy(alpha = 0.6f)) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Email,
-                        contentDescription = "Email",
-                        tint = Color(0xFF1EBFC3)
-                    )
-                },
+                onValueChange = { email = it.replace("\n", "") },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                placeholder = { Text("Email", color = Color.White.copy(alpha = 0.6f)) },
+                leadingIcon = { Icon(Icons.Default.Email, "Email", tint = Color(0xFF1EBFC3)) },
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Email,
                     imeAction = ImeAction.Next
                 ),
+                keyboardActions = KeyboardActions(
+                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                ),
+                singleLine = true,
                 colors = TextFieldDefaults.outlinedTextFieldColors(
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    containerColor = Color(0xFF0A2533),
-                    unfocusedBorderColor = Color(0xFF1EBFC3).copy(alpha = 0.5f),
+                    focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                    containerColor = Color(0xFF0A2533), unfocusedBorderColor = Color(0xFF1EBFC3).copy(alpha = 0.5f),
                     focusedBorderColor = Color(0xFF1EBFC3)
                 ),
                 shape = RoundedCornerShape(8.dp)
@@ -231,28 +284,16 @@ fun SignupScreen(navController: NavController, auth: FirebaseAuth,
             // Password field
             OutlinedTextField(
                 value = password,
-                onValueChange = { password = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                placeholder = { Text(text="Password",
-                    color = Color.White.copy(alpha = 0.6f)) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Lock,
-                        contentDescription = "Password",
-                        tint = Color(0xFF1EBFC3)
-                    )
-                },
+                onValueChange = { password = it.replace("\n", "") },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                placeholder = { Text("Password", color = Color.White.copy(alpha = 0.6f)) },
+                leadingIcon = { Icon(Icons.Default.Lock, "Password", tint = Color(0xFF1EBFC3)) },
                 trailingIcon = {
                     IconButton(onClick = { passwordVisible = !passwordVisible }) {
                         Icon(
-                            painter = painterResource(
-                                id = if (passwordVisible) R.drawable.eye_off else R.drawable.eye
-                            ),
+                            painter = painterResource(id = if (passwordVisible) R.drawable.eye_off else R.drawable.eye),
                             contentDescription = if (passwordVisible) "Hide password" else "Show password",
-                            tint = Color(0xFF1EBFC3),
-                            modifier = Modifier.size(20.dp))
+                            tint = Color(0xFF1EBFC3), modifier = Modifier.size(20.dp))
                     }
                 },
                 visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -260,11 +301,13 @@ fun SignupScreen(navController: NavController, auth: FirebaseAuth,
                     keyboardType = KeyboardType.Password,
                     imeAction = ImeAction.Next
                 ),
+                keyboardActions = KeyboardActions(
+                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                ),
+                singleLine = true,
                 colors = TextFieldDefaults.outlinedTextFieldColors(
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    containerColor = Color(0xFF0A2533),
-                    unfocusedBorderColor = Color(0xFF1EBFC3).copy(alpha = 0.5f),
+                    focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                    containerColor = Color(0xFF0A2533), unfocusedBorderColor = Color(0xFF1EBFC3).copy(alpha = 0.5f),
                     focusedBorderColor = Color(0xFF1EBFC3)
                 ),
                 shape = RoundedCornerShape(8.dp)
@@ -273,28 +316,16 @@ fun SignupScreen(navController: NavController, auth: FirebaseAuth,
             // Confirm Password field
             OutlinedTextField(
                 value = confirmPassword,
-                onValueChange = { confirmPassword = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 24.dp),
-                placeholder = { Text(text="Confirm Password",
-                    color = Color.White.copy(alpha = 0.6f)) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Lock,
-                        contentDescription = "Confirm Password",
-                        tint = Color(0xFF1EBFC3)
-                    )
-                },
+                onValueChange = { confirmPassword = it.replace("\n", "") },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                placeholder = { Text("Confirm Password", color = Color.White.copy(alpha = 0.6f)) },
+                leadingIcon = { Icon(Icons.Default.Lock, "Confirm Password", tint = Color(0xFF1EBFC3)) },
                 trailingIcon = {
                     IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
                         Icon(
-                            painter = painterResource(
-                                id = if (confirmPasswordVisible) R.drawable.eye_off else R.drawable.eye
-                            ),
+                            painter = painterResource(id = if (confirmPasswordVisible) R.drawable.eye_off else R.drawable.eye),
                             contentDescription = if (confirmPasswordVisible) "Hide password" else "Show password",
-                            tint = Color(0xFF1EBFC3),
-                            modifier = Modifier.size(20.dp))
+                            tint = Color(0xFF1EBFC3), modifier = Modifier.size(20.dp))
                     }
                 },
                 visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -302,95 +333,24 @@ fun SignupScreen(navController: NavController, auth: FirebaseAuth,
                     keyboardType = KeyboardType.Password,
                     imeAction = ImeAction.Done
                 ),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        focusManager.clearFocus()
+                        performSignup()
+                    }
+                ),
+                singleLine = true,
                 colors = TextFieldDefaults.outlinedTextFieldColors(
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    containerColor = Color(0xFF0A2533),
-                    unfocusedBorderColor = Color(0xFF1EBFC3).copy(alpha = 0.5f),
+                    focusedTextColor = Color.White, unfocusedTextColor = Color.White,
+                    containerColor = Color(0xFF0A2533), unfocusedBorderColor = Color(0xFF1EBFC3).copy(alpha = 0.5f),
                     focusedBorderColor = Color(0xFF1EBFC3)
                 ),
                 shape = RoundedCornerShape(8.dp)
             )
 
-            val context = LocalContext.current
-
             // Signup button
             Button(
-                onClick = {
-                    if (firstName.isBlank() || lastName.isBlank() || username.isBlank() ||
-                        email.isBlank() || password.isBlank() || confirmPassword.isBlank()) {
-                        errorMessage = "Please fill in all fields"
-                        return@Button
-                    }
-
-                    if (password != confirmPassword) {
-                        errorMessage = "Passwords don't match"
-                        return@Button
-                    }
-
-                    if (password.length < 6) {
-                        errorMessage = "Password should be at least 6 characters"
-                        return@Button
-                    }
-
-                    // Check for network connection first
-                    if (!NetworkUtils.isNetworkAvailable(context)) {
-                        errorMessage = "No internet connection. Please check your network settings and try again."
-                        return@Button
-                    }
-
-                    // Log connection type for debugging
-                    Log.d("Signup", "Network type: ${NetworkUtils.getConnectionType(context)}")
-
-                    isLoading = true
-                    errorMessage = null
-
-                    auth.createUserWithEmailAndPassword(email, password)
-                        .addOnCompleteListener { task ->
-                            isLoading = false
-                            if (task.isSuccessful) {
-                                // Store additional user data in Firestore
-                                val user = hashMapOf(
-                                    "firstName" to firstName,
-                                    "lastName" to lastName,
-                                    "username" to username,
-                                    "email" to email,
-                                    "createdAt" to FieldValue.serverTimestamp()
-                                )
-
-                                db.collection("users")
-                                    .document(auth.currentUser?.uid ?: "")
-                                    .set(user)
-                                    .addOnSuccessListener {
-                                        navController.navigate("home") {
-                                            popUpTo("signup") { inclusive = true }
-                                        }
-                                    }
-                                    .addOnFailureListener { e ->
-                                        errorMessage = when (e) {
-                                            is com.google.firebase.FirebaseNetworkException ->
-                                                "Network error while saving profile. Please check your connection."
-                                            else -> "Failed to save user data: ${e.message}"
-                                        }
-                                        Log.e("Signup", "Error saving user data", e)
-                                    }
-                            } else {
-                                // Handle specific error cases
-                                errorMessage = when (val exception = task.exception) {
-                                    is com.google.firebase.FirebaseNetworkException ->
-                                        "Network error. Please check your internet connection."
-                                    is com.google.firebase.auth.FirebaseAuthUserCollisionException ->
-                                        "The email address is already in use by another account."
-                                    is com.google.firebase.auth.FirebaseAuthInvalidCredentialsException ->
-                                        "Invalid email format."
-                                    is com.google.firebase.auth.FirebaseAuthWeakPasswordException ->
-                                        "Password is too weak. It should be at least 6 characters."
-                                    else -> task.exception?.message ?: "Sign up failed. Please try again."
-                                }
-                                Log.e("Signup", "Signup error", task.exception)
-                            }
-                        }
-                },
+                onClick = { performSignup() },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),

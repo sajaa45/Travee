@@ -68,7 +68,7 @@ fun WelcomeScreen(navController: NavController) {
 
             // Get Started button
             Button(
-                onClick = { navController.navigate("home") },
+                onClick = { navController.navigate("signup") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),

@@ -19,13 +19,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavController
 import com.example.travee.R
-import com.example.travee.model.FavoriteFlight
+import com.example.travee.data.models.FavoriteFlight
 import com.example.travee.service.GroqApiService
 import com.example.travee.ui.components.BottomNavBar
 import com.google.firebase.auth.FirebaseAuth
@@ -187,12 +186,6 @@ fun SingleFlightDetailsScreen(
                         }
                     }
 
-                    IconButton(onClick = { /* TODO: Open settings */ }) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.filter),
-                            contentDescription = "Settings"
-                        )
-                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.White
@@ -306,39 +299,7 @@ fun SingleFlightDetailsScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Trip type selection
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Button(
-                    onClick = { selectedTripType = "One Way" },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (selectedTripType == "One Way") Color(0xFF1EBFC3) else Color.Gray.copy(alpha = 0.2f),
-                        contentColor = if (selectedTripType == "One Way") Color.White else Color.Black
-                    ),
-                    shape = RoundedCornerShape(24.dp)
-                ) {
-                    Text("One Way")
-                }
 
-                Spacer(modifier = Modifier.width(16.dp))
-
-                Button(
-                    onClick = { selectedTripType = "Round Trip" },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (selectedTripType == "Round Trip") Color(0xFF1EBFC3) else Color.Gray.copy(alpha = 0.2f),
-                        contentColor = if (selectedTripType == "Round Trip") Color.White else Color.Black
-                    ),
-                    shape = RoundedCornerShape(24.dp)
-                ) {
-                    Text("Round Trip")
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
 
             // Date information
             Row(
@@ -408,8 +369,9 @@ fun SingleFlightDetailsScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
 
+
+            Spacer(modifier = Modifier.height(16.dp))
             // Book flight button
             Button(
                 onClick = {
@@ -435,7 +397,6 @@ fun SingleFlightDetailsScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-
             // Favorite button
             Button(
                 onClick = {
@@ -516,7 +477,7 @@ fun SingleFlightDetailsScreen(
                     .fillMaxWidth()
                     .height(56.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF4A6572)
+                    containerColor = Color(0xFF1EBFC3)
                 ),
                 shape = RoundedCornerShape(8.dp)
             ) {

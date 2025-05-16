@@ -1,12 +1,16 @@
 package com.example.travee.ui.screens
 
 import android.util.Log
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Clear
@@ -21,14 +25,19 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.travee.R
+import com.example.travee.navigation.navigateWithSaveState
 import com.example.travee.ui.components.BottomNavBar
 import com.example.travee.ui.components.UserProfileHeader
+import com.example.travee.viewmodel.HomeViewModel
+import com.example.travee.viewmodel.SharedViewModel
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import java.text.SimpleDateFormat
@@ -42,22 +51,39 @@ import java.util.*
 fun HomeScreen(
     navController: NavController,
     auth: FirebaseAuth = FirebaseAuth.getInstance(),
-    db: FirebaseFirestore = FirebaseFirestore.getInstance()
+    db: FirebaseFirestore = FirebaseFirestore.getInstance(),
+    viewModel: HomeViewModel = viewModel(),
+    sharedViewModel: SharedViewModel = viewModel()
 ) {
-    // State to hold user's first name
-    var userName by remember { mutableStateOf("User") }
+    // Collect state from ViewModel
+    val budgetInput by viewModel.budgetInput.collectAsState()
+    val startDate by viewModel.startDate.collectAsState()
+    val endDate by viewModel.endDate.collectAsState()
+    val departureCity by viewModel.departureCity.collectAsState()
+    val userName by viewModel.userName.collectAsState()
 
-    // State for input fields
-    var budgetInput by remember { mutableStateOf("") }
-    var startDate by remember { mutableStateOf<Calendar?>(null) }
-    var endDate by remember { mutableStateOf<Calendar?>(null) }
-    var departureCity by remember { mutableStateOf("") }
+    // Get saved scroll position from SharedViewModel
+    val savedScrollPosition by sharedViewModel.homeScrollPosition.collectAsState()
+    val scrollState = rememberScrollState()
+
+    // And add this LaunchedEffect to set the scroll position:
+    LaunchedEffect(savedScrollPosition) {
+        if (savedScrollPosition > 0) {
+            scrollState.scrollTo(savedScrollPosition)
+        }
+    }
+
+    // Save scroll position when leaving the screen
+    DisposableEffect(Unit) {
+        onDispose {
+            sharedViewModel.updateHomeScrollPosition(scrollState.value)
+        }
+    }
 
     // State for dialogs
-    var showDatePicker by remember { mutableStateOf(false) }
-    var dateSelectionMode by remember { mutableStateOf<DateSelectionMode>(DateSelectionMode.Start) }
+    var showDateRangePicker by remember { mutableStateOf(false) }
     var showCountryPicker by remember { mutableStateOf(false) }
-    val DarkGray = Color(0xFFA9A9A9)
+
     // Countries list and filtered list
     val countries = remember { getAllCountries() }
     var countrySearchQuery by remember { mutableStateOf("") }
@@ -74,29 +100,7 @@ fun HomeScreen(
 
     // Fetch user's first name from Firestore
     LaunchedEffect(key1 = auth.currentUser?.uid) {
-        auth.currentUser?.uid?.let { userId ->
-            try {
-                db.collection("users")
-                    .document(userId)
-                    .get()
-                    .addOnSuccessListener { document ->
-                        if (document != null && document.exists()) {
-                            val firstName = document.getString("firstName")
-                            if (!firstName.isNullOrEmpty()) {
-                                userName = firstName
-                                Log.d("HomeScreen", "User name loaded: $userName")
-                            }
-                        } else {
-                            Log.d("HomeScreen", "No user document found")
-                        }
-                    }
-                    .addOnFailureListener { e ->
-                        Log.e("HomeScreen", "Error getting user data", e)
-                    }
-            } catch (e: Exception) {
-                Log.e("HomeScreen", "Error retrieving user data", e)
-            }
-        }
+        viewModel.fetchUserData(auth, db)
     }
 
     Scaffold(
@@ -107,9 +111,10 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(horizontal = 24.dp, vertical = 16.dp)
+                .verticalScroll(scrollState)
         ) {
             // User profile header with dynamically loaded name
-            UserProfileHeader(name = userName)
+            UserProfileHeader()
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -143,7 +148,7 @@ fun HomeScreen(
                         !newValue.startsWith(".") &&
                         newValue.count { it == '.' } <= 1
                     ) {
-                        budgetInput = newValue
+                        viewModel.updateBudget(newValue)
                     }
                 },
                 modifier = Modifier
@@ -172,15 +177,14 @@ fun HomeScreen(
                     .padding(bottom = 24.dp)
                     .clickable {
                         focusManager.clearFocus()
-                        dateSelectionMode = if (startDate == null) DateSelectionMode.Start else DateSelectionMode.End
-                        showDatePicker = true
+                        showDateRangePicker = true
                     }
             ) {
                 OutlinedTextField(
                     value = formatDateRange(startDate, endDate),
                     onValueChange = {},
                     enabled = false,
-                    placeholder = { Text("Select Date Range", color = Color.DarkGray) },
+                    placeholder = { Text("Select Date Range") },
                     leadingIcon = {
                         Icon(
                             painter = painterResource(id = R.drawable.vector__1_),
@@ -191,15 +195,14 @@ fun HomeScreen(
                     trailingIcon = {
                         if (startDate != null || endDate != null) {
                             IconButton(onClick = {
-                                startDate = null
-                                endDate = null
+                                viewModel.clearDates()
                             }) {
                                 Icon(Icons.Default.Clear, contentDescription = "Clear dates", tint = Color.DarkGray)
                             }
                         } else {
                             Icon(Icons.Default.ArrowDropDown, contentDescription = "Select dates", tint = Color.DarkGray)
                         }
-                    },// match the structure with city input
+                    },
                     readOnly = true,
                     shape = RoundedCornerShape(8.dp),
                     colors = TextFieldDefaults.outlinedTextFieldColors(
@@ -221,24 +224,23 @@ fun HomeScreen(
                     .clickable {
                         focusManager.clearFocus()
                         showCountryPicker = true
-
                     }
             ) {
                 OutlinedTextField(
                     value = departureCity,
                     onValueChange = {},
-                    enabled = false, // keep disabled
+                    enabled = false,
                     placeholder = { Text("Departure City", color = Color.DarkGray) },
                     leadingIcon = {
                         Icon(
                             painter = painterResource(id = R.drawable.location_on),
                             contentDescription = "Location",
-                            tint = Color.DarkGray // custom color for disabled icon
+                            tint = Color.DarkGray
                         )
                     },
                     trailingIcon = {
                         if (departureCity.isNotEmpty()) {
-                            IconButton(onClick = { departureCity = "" }) {
+                            IconButton(onClick = { viewModel.updateDepartureCity("") }) {
                                 Icon(Icons.Default.Clear, contentDescription = "Clear city", tint = Color.DarkGray)
                             }
                         } else {
@@ -271,7 +273,7 @@ fun HomeScreen(
                         7 // Default to 7 days if no date range selected
                     }
 
-                    // Format departure date for API
+                    // Format departure date for API - FIXED to ensure we're using the start date
                     val departDateFormatted = if (startDate != null) {
                         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
                         val localDate = startDate!!.toInstant().atZone(ZoneId.systemDefault()).toLocalDate()
@@ -281,8 +283,11 @@ fun HomeScreen(
                         LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
                     }
 
+                    // Log the dates for debugging
+                    Log.d("HomeScreen", "Search with: Start date = $departDateFormatted, Trip days = $tripDays")
+
                     // Navigate to flight details with all required parameters
-                    navController.navigate(
+                    navController.navigateWithSaveState(
                         "flight_details?budget=$budget" +
                                 "&departureCountry=${departureCity.lowercase()}" +
                                 "&tripDays=$tripDays" +
@@ -308,85 +313,18 @@ fun HomeScreen(
         }
     }
 
-    // Date picker dialog
-    if (showDatePicker) {
-        val initialDate = when (dateSelectionMode) {
-            DateSelectionMode.Start -> startDate?.timeInMillis ?: System.currentTimeMillis()
-            DateSelectionMode.End -> endDate?.timeInMillis ?: (startDate?.timeInMillis ?: System.currentTimeMillis())
-        }
-
-        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialDate)
-
-        Dialog(onDismissRequest = { showDatePicker = false }) {
-            Surface(
-                modifier = Modifier
-                    .wrapContentWidth()
-                    .wrapContentHeight(),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surface
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = "Select ${if (dateSelectionMode == DateSelectionMode.Start) "Start" else "End"} Date",
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-
-                    DatePicker(
-                        state = datePickerState,
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                    )
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 16.dp),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        TextButton(onClick = { showDatePicker = false }) {
-                            Text("Cancel")
-                        }
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        Button(onClick = {
-                            val selection = datePickerState.selectedDateMillis
-                            if (selection != null) {
-                                val calendar = Calendar.getInstance()
-                                calendar.timeInMillis = selection
-
-                                when (dateSelectionMode) {
-                                    DateSelectionMode.Start -> {
-                                        startDate = calendar
-                                        // If end date is before new start date, clear it
-                                        if (endDate != null && endDate!!.before(calendar)) {
-                                            endDate = null
-                                        }
-                                        // Prompt for end date if not set
-                                        if (endDate == null) {
-                                            dateSelectionMode = DateSelectionMode.End
-                                            return@Button
-                                        }
-                                    }
-                                    DateSelectionMode.End -> {
-                                        endDate = calendar
-                                        // If start date is after new end date, clear it
-                                        if (startDate != null && startDate!!.after(calendar)) {
-                                            startDate = null
-                                        }
-                                    }
-                                }
-                            }
-                            showDatePicker = false
-                        }) {
-                            Text("OK")
-                        }
-                    }
-                }
+    // Improved date range picker dialog
+    if (showDateRangePicker) {
+        ImprovedDateRangePickerDialog(
+            initialStartDate = startDate,
+            initialEndDate = endDate,
+            onDismiss = { showDateRangePicker = false },
+            onDateRangeSelected = { start, end ->
+                viewModel.updateStartDate(start)
+                viewModel.updateEndDate(end)
+                showDateRangePicker = false
             }
-        }
+        )
     }
 
     // Country picker dialog
@@ -400,13 +338,228 @@ fun HomeScreen(
                 countrySearchQuery = ""
             },
             onCountrySelected = { country ->
-                departureCity = country
+                viewModel.updateDepartureCity(country)
                 showCountryPicker = false
                 countrySearchQuery = ""
                 focusManager.clearFocus()
             }
         )
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ImprovedDateRangePickerDialog(
+    initialStartDate: Calendar?,
+    initialEndDate: Calendar?,
+    onDismiss: () -> Unit,
+    onDateRangeSelected: (Calendar?, Calendar?) -> Unit
+) {
+    val today = Calendar.getInstance()
+
+    // State for selected dates - Initialize start date to today if null
+    var startDate by remember { mutableStateOf(initialStartDate ?: today) }
+    var endDate by remember { mutableStateOf(initialEndDate) }
+
+    // State for current view
+    var currentView by remember { mutableStateOf(DatePickerView.Start) }
+
+    // Initial date for the date picker
+    val initialDate = when (currentView) {
+        DatePickerView.Start -> startDate.timeInMillis
+        DatePickerView.End -> endDate?.timeInMillis ?:
+        (startDate.timeInMillis + 7 * 24 * 60 * 60 * 1000)
+    }
+
+    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialDate)
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .wrapContentHeight(),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+                // Title
+                Text(
+                    text = "Select Travel Dates",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                // Date range display
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    // Start date card
+                    DateCard(
+                        label = "Departure",
+                        date = startDate,
+                        isSelected = currentView == DatePickerView.Start,
+                        onClick = { currentView = DatePickerView.Start }
+                    )
+
+                    // Arrow between dates
+                    Icon(
+                        painter = painterResource(id = R.drawable.vector),
+                        contentDescription = "To",
+                        tint = Color(0xFF1EBFC3),
+                        modifier = Modifier
+                            .padding(horizontal = 8.dp)
+                            .align(Alignment.CenterVertically)
+                    )
+
+                    // End date card
+                    DateCard(
+                        label = "Return",
+                        date = endDate,
+                        isSelected = currentView == DatePickerView.End,
+                        onClick = { currentView = DatePickerView.End }
+                    )
+                }
+
+                // Date picker
+                DatePicker(
+                    state = datePickerState,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    title = null,
+                    headline = null,
+                    showModeToggle = false
+                )
+
+                // Action buttons
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    // Cancel button
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        shape = RoundedCornerShape(24.dp),
+                        border = BorderStroke(1.dp, Color(0xFF1EBFC3)),
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        Text("Cancel", color = Color(0xFF1EBFC3))
+                    }
+
+                    // Next/OK button
+                    Button(
+                        onClick = {
+                            val selection = datePickerState.selectedDateMillis
+                            if (selection != null) {
+                                val calendar = Calendar.getInstance()
+                                calendar.timeInMillis = selection
+
+                                when (currentView) {
+                                    DatePickerView.Start -> {
+                                        startDate = calendar
+                                        // If end date is before new start date, clear it
+                                        if (endDate != null && endDate!!.before(calendar)) {
+                                            endDate = null
+                                        }
+
+                                        // Switch to end date selection if not set
+                                        if (endDate == null) {
+                                            currentView = DatePickerView.End
+                                            return@Button
+                                        }
+                                    }
+                                    DatePickerView.End -> {
+                                        // Ensure end date is not before start date
+                                        if (calendar.before(startDate)) {
+                                            // Show error or set to start date + 1 day
+                                            val newEnd = Calendar.getInstance()
+                                            newEnd.timeInMillis = startDate.timeInMillis
+                                            newEnd.add(Calendar.DAY_OF_MONTH, 1)
+                                            endDate = newEnd
+                                        } else {
+                                            endDate = calendar
+                                        }
+                                    }
+                                }
+                            }
+
+                            // If both dates are selected or we're on the end date view, confirm selection
+                            if (endDate != null || currentView == DatePickerView.End) {
+                                onDateRangeSelected(startDate, endDate)
+                            } else {
+                                // Otherwise switch to end date selection
+                                currentView = DatePickerView.End
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF1EBFC3)
+                        ),
+                        shape = RoundedCornerShape(24.dp)
+                    ) {
+                        Text(if (endDate != null || currentView == DatePickerView.End) "OK" else "Next")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DateCard(
+    label: String,
+    date: Calendar?,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .width(130.dp)
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) Color(0xFF1EBFC3).copy(alpha = 0.1f) else Color.White
+        ),
+        border = BorderStroke(
+            width = if (isSelected) 2.dp else 1.dp,
+            color = if (isSelected) Color(0xFF1EBFC3) else Color.LightGray
+        ),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.Gray
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = if (date != null) {
+                    val dateFormat = SimpleDateFormat("MMM dd", Locale.getDefault())
+                    dateFormat.format(date.time)
+                } else {
+                    "Select"
+                },
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = if (isSelected) Color(0xFF1EBFC3) else Color.Black
+            )
+        }
+    }
+}
+
+enum class DatePickerView {
+    Start, End
 }
 
 enum class DateSelectionMode {

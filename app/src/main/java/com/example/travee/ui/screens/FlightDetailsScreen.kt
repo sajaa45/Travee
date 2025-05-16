@@ -2,26 +2,38 @@ package com.example.travee.ui.screens
 
 import android.util.Log
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.travee.R
+import com.example.travee.navigation.navigateWithSaveState
 import com.example.travee.service.SkyScannerApiService
 import com.example.travee.ui.components.BottomNavBar
+import com.example.travee.viewmodel.SharedViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.time.LocalDate
@@ -35,13 +47,38 @@ fun FlightDetailsScreen(
     budget: Double = 0.0,
     departureCountry: String = "",
     tripDays: Int = 7,
-    departDate: String = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+    departDate: String = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
+    sharedViewModel: SharedViewModel = viewModel()
 ) {
     val skyScannerApiService = remember { SkyScannerApiService() }
     var flightResults by remember { mutableStateOf<List<SkyScannerApiService.FlightResult>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
+
+    // Get saved scroll position from SharedViewModel
+    val savedScrollPosition by sharedViewModel.flightDetailsScrollPosition.collectAsState()
+    val listState = rememberLazyListState()
+
+    // Save scroll position when leaving the screen
+    DisposableEffect(Unit) {
+        onDispose {
+            if (listState.firstVisibleItemIndex > 0) {
+                sharedViewModel.updateFlightDetailsScrollPosition(listState.firstVisibleItemIndex)
+            }
+        }
+    }
+
+    LaunchedEffect(savedScrollPosition) {
+        if (savedScrollPosition > 0) {
+            listState.scrollToItem(savedScrollPosition)
+        }
+    }
+
+    // Search functionality
+    var showSearchDialog by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var filteredResults by remember { mutableStateOf<List<SkyScannerApiService.FlightResult>>(emptyList()) }
 
     // Format dates for display
     val departDateFormatted = remember(departDate) {
@@ -89,6 +126,21 @@ fun FlightDetailsScreen(
         }
     }
 
+    // Filter results when search query changes
+    LaunchedEffect(searchQuery, flightResults) {
+        if (searchQuery.isBlank()) {
+            filteredResults = emptyList()
+        } else {
+            val query = searchQuery.lowercase()
+            filteredResults = flightResults.filter { flight ->
+                flight.destination.lowercase().contains(query) ||
+                        flight.airline.lowercase().contains(query) ||
+                        flight.price.toString().contains(query) ||
+                        flight.destinationCountry.lowercase().contains(query)
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -118,16 +170,13 @@ fun FlightDetailsScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { /* TODO: Open search */ }) {
+                    IconButton(onClick = {
+                        searchQuery = ""
+                        showSearchDialog = true
+                    }) {
                         Icon(
                             painter = painterResource(id = R.drawable.search),
                             contentDescription = "Search"
-                        )
-                    }
-                    IconButton(onClick = { /* TODO: Open settings */ }) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.filter),
-                            contentDescription = "Settings"
                         )
                     }
                 },
@@ -136,7 +185,7 @@ fun FlightDetailsScreen(
                 )
             )
         },
-        bottomBar = { BottomNavBar(navController = navController, selectedItem = 0) }
+        bottomBar = { BottomNavBar(navController = navController, selectedItem = 1) }
     ) { paddingValues ->
         Box(
             modifier = Modifier
@@ -213,6 +262,7 @@ fun FlightDetailsScreen(
                 }
             } else {
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 24.dp)
@@ -263,7 +313,7 @@ fun FlightDetailsScreen(
                             flight = flight,
                             onDetailsClick = {
                                 // Navigate to single flight details screen
-                                navController.navigate(
+                                navController.navigateWithSaveState(
                                     "single_flight_details?" +
                                             "destination=${flight.destination}&" +
                                             "destinationAirport=${flight.destinationAirport}&" +
@@ -281,6 +331,234 @@ fun FlightDetailsScreen(
                 }
             }
         }
+    }
+
+    // Search Dialog
+    if (showSearchDialog) {
+        SearchDialog(
+            searchQuery = searchQuery,
+            onSearchQueryChange = { searchQuery = it },
+            onDismiss = { showSearchDialog = false },
+            filteredResults = filteredResults,
+            onFlightSelected = { flight ->
+                showSearchDialog = false
+                // Navigate to single flight details screen
+                navController.navigateWithSaveState(
+                    "single_flight_details?" +
+                            "destination=${flight.destination}&" +
+                            "destinationAirport=${flight.destinationAirport}&" +
+                            "destinationCountry=${flight.destinationCountry}&" +
+                            "price=${flight.price}&" +
+                            "airline=${flight.airline}&" +
+                            "departureAt=${flight.departureAt}&" +
+                            "returnAt=${flight.returnAt}&" +
+                            "link=${flight.link}&" +
+                            "originCountry=$departureCountry"
+                )
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SearchDialog(
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    filteredResults: List<SkyScannerApiService.FlightResult>,
+    onFlightSelected: (SkyScannerApiService.FlightResult) -> Unit
+) {
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        delay(100) // Small delay to ensure the dialog is shown before requesting focus
+        focusRequester.requestFocus()
+    }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 500.dp),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+                // Search field
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = onSearchQueryChange,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 16.dp)
+                        .focusRequester(focusRequester),
+                    placeholder = { Text("Search flights by destination, airline, or price") },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Search"
+                        )
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { onSearchQueryChange("") }) {
+                                Icon(
+                                    imageVector = Icons.Default.Clear,
+                                    contentDescription = "Clear"
+                                )
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = TextFieldDefaults.outlinedTextFieldColors(
+                        focusedBorderColor = Color(0xFF1EBFC3),
+                        cursorColor = Color(0xFF1EBFC3)
+                    )
+                )
+
+                // Results
+                if (searchQuery.isNotEmpty()) {
+                    if (filteredResults.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "No flights found matching \"$searchQuery\"",
+                                color = Color.Gray,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = "Found ${filteredResults.size} flights",
+                            fontSize = 14.sp,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                        ) {
+                            items(filteredResults) { flight ->
+                                SearchResultItem(
+                                    flight = flight,
+                                    searchQuery = searchQuery,
+                                    onClick = { onFlightSelected(flight) }
+                                )
+
+                                if (flight != filteredResults.last()) {
+                                    Divider(modifier = Modifier.padding(vertical = 8.dp))
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Enter search terms to find flights",
+                            color = Color.Gray,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+
+                // Close button
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF1EBFC3)
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Close")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SearchResultItem(
+    flight: SkyScannerApiService.FlightResult,
+    searchQuery: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Destination icon
+        Icon(
+            painter = painterResource(id = R.drawable.location_on),
+            contentDescription = null,
+            tint = Color(0xFF1EBFC3),
+            modifier = Modifier.padding(end = 16.dp)
+        )
+
+        // Flight info
+        Column(
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(
+                text = "${flight.destination}, ${flight.destinationCountry}",
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp
+            )
+
+            Text(
+                text = flight.airline,
+                fontSize = 14.sp,
+                color = Color(0xFF1EBFC3)
+            )
+
+            Row(
+                modifier = Modifier.padding(top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.vector),
+                    contentDescription = null,
+                    tint = Color.Gray,
+                    modifier = Modifier.size(16.dp)
+                )
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                Text(
+                    text = formatApiDate(flight.departureAt),
+                    fontSize = 12.sp,
+                    color = Color.Gray
+                )
+            }
+        }
+
+        // Price
+        Text(
+            text = "${flight.price} TND",
+            fontWeight = FontWeight.Bold,
+            fontSize = 16.sp,
+            color = Color(0xFF1EBFC3)
+        )
     }
 }
 
@@ -389,6 +667,7 @@ fun FlightResultCard(
         }
     }
 }
+
 // Helper function to format API dates
 private fun formatApiDate(dateString: String): String {
     return try {

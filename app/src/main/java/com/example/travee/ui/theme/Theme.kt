@@ -1,6 +1,5 @@
 package com.example.travee.ui.theme
 
-
 import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -11,11 +10,14 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import com.example.travee.data.ThemeManager
 
 private val LightColorScheme = lightColorScheme(
     primary = Color(0xFF1EBFC3),
@@ -45,14 +47,20 @@ private val DarkColorScheme = darkColorScheme(
 
 @Composable
 fun TravelAppTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    themeManager: ThemeManager = ThemeManager.getInstance(),
     content: @Composable () -> Unit
 ) {
+    val darkTheme by themeManager.isDarkTheme.collectAsState()
+    val dynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
     val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+        dynamicColor && darkTheme -> {
             val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            dynamicDarkColorScheme(context)
+        }
+        dynamicColor && !darkTheme -> {
+            val context = LocalContext.current
+            dynamicLightColorScheme(context)
         }
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
@@ -62,7 +70,6 @@ fun TravelAppTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            @Suppress("DEPRECATION")
             window.statusBarColor = colorScheme.primary.toArgb()
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }

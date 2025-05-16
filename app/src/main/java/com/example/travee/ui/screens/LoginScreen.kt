@@ -5,7 +5,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
@@ -13,11 +12,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -30,7 +34,6 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.ktx.Firebase
 import com.example.travee.utils.NetworkUtils
-import androidx.compose.ui.platform.LocalContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,7 +43,51 @@ fun LoginScreen(navController: NavController, auth: FirebaseAuth) {
     var passwordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
 
+    // Function to handle login
+    fun performLogin() {
+        if (email.isBlank() || password.isBlank()) {
+            errorMessage = "Please fill in all fields"
+            return
+        }
+
+        // Check for network connection first
+        if (!NetworkUtils.isNetworkAvailable(context)) {
+            errorMessage = "No internet connection. Please check your network settings and try again."
+            return
+        }
+
+        isLoading = true
+        errorMessage = null
+
+        // Log connection type for debugging
+        Log.d("Login", "Network type: ${NetworkUtils.getConnectionType(context)}")
+
+        auth.signInWithEmailAndPassword(email, password)
+            .addOnCompleteListener { task ->
+                isLoading = false
+                if (task.isSuccessful) {
+                    // Login successful, navigate to home
+                    navController.navigate("home") {
+                        popUpTo("login") { inclusive = true }
+                    }
+                } else {
+                    // Handle specific error cases
+                    errorMessage = when (val exception = task.exception) {
+                        is com.google.firebase.FirebaseNetworkException ->
+                            "Network error. Please check your internet connection and try again."
+                        is com.google.firebase.auth.FirebaseAuthInvalidUserException ->
+                            "Account does not exist or has been disabled."
+                        is com.google.firebase.auth.FirebaseAuthInvalidCredentialsException ->
+                            "Invalid email or password."
+                        else -> task.exception?.message ?: "Login failed. Please try again."
+                    }
+                    Log.e("Login", "Login error: ${task.exception}")
+                }
+            }
+    }
 
     Box(
         modifier = Modifier
@@ -104,8 +151,12 @@ fun LoginScreen(navController: NavController, auth: FirebaseAuth) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 16.dp),
-                placeholder = { Text(text="Email",
-                    color = Color.White.copy(alpha = 0.6f)) },
+                placeholder = {
+                    Text(
+                        text = "Email",
+                        color = Color.White.copy(alpha = 0.6f)
+                    )
+                },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.Email,
@@ -117,6 +168,10 @@ fun LoginScreen(navController: NavController, auth: FirebaseAuth) {
                     keyboardType = KeyboardType.Email,
                     imeAction = ImeAction.Next
                 ),
+                keyboardActions = KeyboardActions(
+                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                ),
+                singleLine = true,
                 colors = TextFieldDefaults.outlinedTextFieldColors(
                     focusedTextColor = Color.White,
                     unfocusedTextColor = Color.White,
@@ -130,12 +185,19 @@ fun LoginScreen(navController: NavController, auth: FirebaseAuth) {
             // Password field
             OutlinedTextField(
                 value = password,
-                onValueChange = { password = it },
+                onValueChange = {
+                    // Remove any newline characters that might be pasted
+                    password = it.replace("\n", "")
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 16.dp),
-                placeholder = { Text(text="Password",
-                    color = Color.White.copy(alpha = 0.6f)) },
+                placeholder = {
+                    Text(
+                        text = "Password",
+                        color = Color.White.copy(alpha = 0.6f)
+                    )
+                },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.Lock,
@@ -159,6 +221,13 @@ fun LoginScreen(navController: NavController, auth: FirebaseAuth) {
                     keyboardType = KeyboardType.Password,
                     imeAction = ImeAction.Done
                 ),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        focusManager.clearFocus()
+                        performLogin()
+                    }
+                ),
+                singleLine = true,
                 colors = TextFieldDefaults.outlinedTextFieldColors(
                     focusedTextColor = Color.White,
                     unfocusedTextColor = Color.White,
@@ -187,53 +256,8 @@ fun LoginScreen(navController: NavController, auth: FirebaseAuth) {
             Spacer(modifier = Modifier.height(24.dp))
 
             // Login button
-            // Inside LoginScreen.kt: Modify the login button onClick function
-
-            val context = LocalContext.current
-
-            // When button is clicked
             Button(
-                onClick = {
-                    if (email.isBlank() || password.isBlank()) {
-                        errorMessage = "Please fill in all fields"
-                        return@Button
-                    }
-
-                    // Check for network connection first
-                    if (!NetworkUtils.isNetworkAvailable(context)) {
-                        errorMessage = "No internet connection. Please check your network settings and try again."
-                        return@Button
-                    }
-
-                    isLoading = true
-                    errorMessage = null
-
-                    // Log connection type for debugging
-                    Log.d("Login", "Network type: ${NetworkUtils.getConnectionType(context)}")
-
-                    auth.signInWithEmailAndPassword(email, password)
-                        .addOnCompleteListener { task ->
-                            isLoading = false
-                            if (task.isSuccessful) {
-                                // Login successful, navigate to home
-                                navController.navigate("home") {
-                                    popUpTo("login") { inclusive = true }
-                                }
-                            } else {
-                                // Handle specific error cases
-                                errorMessage = when (val exception = task.exception) {
-                                    is com.google.firebase.FirebaseNetworkException ->
-                                        "Network error. Please check your internet connection and try again."
-                                    is com.google.firebase.auth.FirebaseAuthInvalidUserException ->
-                                        "Account does not exist or has been disabled."
-                                    is com.google.firebase.auth.FirebaseAuthInvalidCredentialsException ->
-                                        "Invalid email or password."
-                                    else -> task.exception?.message ?: "Login failed. Please try again."
-                                }
-                                Log.e("Login", "Login error: ${task.exception}")
-                            }
-                        }
-                },
+                onClick = { performLogin() },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),

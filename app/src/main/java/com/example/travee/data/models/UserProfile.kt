@@ -1,4 +1,4 @@
-package com.example.travee.model
+package com.example.travee.data.models
 
 data class UserProfile(
     val userId: String = "",
@@ -50,10 +50,13 @@ data class UserProfile(
         }
     }
 
-    // Get avatar URL based on name
+    // Get avatar URL based on name or default to Yoda
     fun getAvatarUrl(): String {
-        // Generate an avatar based on user's name using UI Avatars service
-        val name = getFullName().replace(" ", "+")
-        return "https://ui-avatars.com/api/?name=$name&background=1EBFC3&color=fff&size=256"
+        return if (photoUrl.isNotEmpty()) {
+            photoUrl
+        } else {
+            // Default Yoda image
+            "https://i.imgur.com/7Kky3Vu.jpg"
+        }
     }
 }
