@@ -42,11 +42,11 @@ fun AppNavigation(
         }
 
         composable("favorites") {
-            FavoritesScreen(navController = navController)
+            FavoritesScreen(navController = navController, auth = auth, db = db)
         }
 
         composable("profile") {
-            ProfileScreen(navController = navController)
+            ProfileScreen(navController = navController, auth = auth, db = db)
         }
 
         composable(
@@ -155,7 +155,9 @@ fun AppNavigation(
                 departureAt = departureAt,
                 returnAt = returnAt,
                 link = link,
-                originCountry = originCountry
+                originCountry = originCountry,
+                auth = auth,
+                db = db
             )
         }
     }

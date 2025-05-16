@@ -73,15 +73,26 @@ dependencies {
     implementation(libs.androidx.appcompat)
 
     // Networking
+    implementation("androidx.room:room-runtime:2.6.1")
     implementation(libs.okhttp)
     implementation(libs.kotlinx.coroutines.android)
     implementation("androidx.compose.material:material-icons-extended:1.5.0")
     implementation(platform("com.google.firebase:firebase-bom:32.7.4"))
     implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-database-ktx")
     implementation(libs.firebase.auth.ktx)
     implementation(libs.firebase.firestore.ktx)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+
+    // Firebase Storage for profile images
+    implementation("com.google.firebase:firebase-storage-ktx:20.3.0")
+
+    // Image loading and caching library
+    implementation("io.coil-kt:coil-compose:2.4.0")
+
+    // Image cropping library
+    implementation("com.github.yalantis:ucrop:2.2.8")
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.ext.junit)

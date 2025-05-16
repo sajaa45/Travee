@@ -8,13 +8,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -24,9 +25,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavController
 import com.example.travee.R
+import com.example.travee.model.FavoriteFlight
 import com.example.travee.service.GroqApiService
 import com.example.travee.ui.components.BottomNavBar
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -45,18 +50,26 @@ fun SingleFlightDetailsScreen(
     departureAt: String,
     returnAt: String,
     link: String,
-    originCountry: String
+    originCountry: String,
+    auth: FirebaseAuth = FirebaseAuth.getInstance(),
+    db: FirebaseFirestore = FirebaseFirestore.getInstance()
 ) {
     var selectedTripType by remember { mutableStateOf("Round Trip") }
     val uriHandler = LocalUriHandler.current
     val scrollState = rememberScrollState()
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
     // For activities dialog
     var showActivitiesDialog by remember { mutableStateOf(false) }
     var activitiesText by remember { mutableStateOf("") }
     var isLoadingActivities by remember { mutableStateOf(false) }
     val groqApiService = remember { GroqApiService() }
-    val coroutineScope = rememberCoroutineScope()
+
+    // For favorites functionality
+    var isFavorite by remember { mutableStateOf(false) }
+    var isCheckingFavorite by remember { mutableStateOf(true) }
+    var showLoginPrompt by remember { mutableStateOf(false) }
 
     // Format dates for display
     val departureTime = formatApiDateWithTime(departureAt)
@@ -68,6 +81,47 @@ fun SingleFlightDetailsScreen(
 
     // Calculate trip duration in days
     val tripDays = calculateTripDuration(departureAt, returnAt)
+
+    // Create a flight object for favorites
+    val flightId = remember {
+        "$destinationAirport-$departureAt-$returnAt".hashCode().toString()
+    }
+
+    val favoriteFlight = remember {
+        FavoriteFlight(
+            id = flightId,
+            userId = auth.currentUser?.uid ?: "",
+            destination = destination,
+            destinationAirport = destinationAirport,
+            destinationCountry = destinationCountry,
+            price = price,
+            airline = airline,
+            departureAt = departureAt,
+            returnAt = returnAt,
+            link = link,
+            originCountry = originCountry
+        )
+    }
+
+    // Check if flight is already in favorites
+    LaunchedEffect(key1 = auth.currentUser?.uid) {
+        isCheckingFavorite = true
+        if (auth.currentUser != null) {
+            try {
+                val document = db.collection("favorites")
+                    .document(auth.currentUser!!.uid)
+                    .collection("flights")
+                    .document(flightId)
+                    .get()
+                    .await()
+
+                isFavorite = document.exists()
+            } catch (e: Exception) {
+                Log.e("SingleFlightDetails", "Error checking favorite status", e)
+            }
+        }
+        isCheckingFavorite = false
+    }
 
     Scaffold(
         topBar = {
@@ -98,12 +152,41 @@ fun SingleFlightDetailsScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { /* TODO: Open search */ }) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.search),
-                            contentDescription = "Search"
+                    // Favorite button in the app bar
+                    if (isCheckingFavorite) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.Gray
                         )
+                    } else {
+                        IconButton(
+                            onClick = {
+                                if (auth.currentUser == null) {
+                                    showLoginPrompt = true
+                                } else {
+                                    coroutineScope.launch {
+                                        toggleFavorite(
+                                            db = db,
+                                            auth = auth,
+                                            flight = favoriteFlight,
+                                            isFavorite = isFavorite,
+                                            onSuccess = { newFavoriteStatus ->
+                                                isFavorite = newFavoriteStatus
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.Favorite,
+                                contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                                tint = if (isFavorite) Color.Red else Color.Gray
+                            )
+                        }
                     }
+
                     IconButton(onClick = { /* TODO: Open settings */ }) {
                         Icon(
                             painter = painterResource(id = R.drawable.filter),
@@ -353,7 +436,54 @@ fun SingleFlightDetailsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Activities button - NEW
+            // Favorite button
+            Button(
+                onClick = {
+                    if (auth.currentUser == null) {
+                        showLoginPrompt = true
+                    } else {
+                        coroutineScope.launch {
+                            toggleFavorite(
+                                db = db,
+                                auth = auth,
+                                flight = favoriteFlight,
+                                isFavorite = isFavorite,
+                                onSuccess = { newFavoriteStatus ->
+                                    isFavorite = newFavoriteStatus
+                                }
+                            )
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (isFavorite) Color.Red.copy(alpha = 0.8f) else Color(0xFF4A6572)
+                ),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.Favorite,
+                        contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (isFavorite) "Remove from Favorites" else "Add to Favorites",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Activities button
             Button(
                 onClick = {
                     showActivitiesDialog = true
@@ -560,6 +690,60 @@ fun SingleFlightDetailsScreen(
                 }
             }
         }
+    }
+
+    // Login prompt dialog
+    if (showLoginPrompt) {
+        AlertDialog(
+            onDismissRequest = { showLoginPrompt = false },
+            title = { Text("Sign In Required") },
+            text = { Text("You need to be signed in to save favorites. Would you like to sign in now?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLoginPrompt = false
+                        navController.navigate("login")
+                    }
+                ) {
+                    Text("Sign In")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLoginPrompt = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+// Function to toggle favorite status
+private suspend fun toggleFavorite(
+    db: FirebaseFirestore,
+    auth: FirebaseAuth,
+    flight: FavoriteFlight,
+    isFavorite: Boolean,
+    onSuccess: (Boolean) -> Unit
+) {
+    val userId = auth.currentUser?.uid ?: return
+
+    try {
+        val flightRef = db.collection("favorites")
+            .document(userId)
+            .collection("flights")
+            .document(flight.id)
+
+        if (isFavorite) {
+            // Remove from favorites
+            flightRef.delete().await()
+            onSuccess(false)
+        } else {
+            // Add to favorites
+            flightRef.set(flight).await()
+            onSuccess(true)
+        }
+    } catch (e: Exception) {
+        Log.e("SingleFlightDetails", "Error toggling favorite", e)
     }
 }
 
