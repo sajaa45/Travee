@@ -179,41 +179,54 @@ fun HomeScreen(
                         focusManager.clearFocus()
                         showDateRangePicker = true
                     }
-            ) {
-                OutlinedTextField(
-                    value = formatDateRange(startDate, endDate),
-                    onValueChange = {},
-                    enabled = false,
-                    placeholder = { Text("Select Date Range") },
-                    leadingIcon = {
-                        Icon(
-                            painter = painterResource(id = R.drawable.vector__1_),
-                            contentDescription = "Date Range",
-                            tint = Color.DarkGray
-                        )
-                    },
-                    trailingIcon = {
-                        if (startDate != null || endDate != null) {
-                            IconButton(onClick = {
-                                viewModel.clearDates()
-                            }) {
-                                Icon(Icons.Default.Clear, contentDescription = "Clear dates", tint = Color.DarkGray)
-                            }
-                        } else {
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = "Select dates", tint = Color.DarkGray)
+            ) {OutlinedTextField(
+                value = formatDateRange(startDate, endDate),
+                onValueChange = {},
+                enabled = false,
+                placeholder = {
+                    Text(
+                        "Select Date Range",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        painter = painterResource(id = R.drawable.vector__1_),
+                        contentDescription = "Date Range",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                trailingIcon = {
+                    if (startDate != null || endDate != null) {
+                        IconButton(onClick = {
+                            viewModel.clearDates()
+                        }) {
+                            Icon(
+                                Icons.Default.Clear,
+                                contentDescription = "Clear dates",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                    },
-                    readOnly = true,
-                    shape = RoundedCornerShape(8.dp),
-                    colors = TextFieldDefaults.outlinedTextFieldColors(
-                        disabledTextColor = Color.Black,
-                        disabledBorderColor = Color.LightGray,
-                        disabledPlaceholderColor = Color.Gray,
-                        disabledLeadingIconColor = Color.DarkGray,
-                        disabledTrailingIconColor = Color.DarkGray
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                    } else {
+                        Icon(
+                            Icons.Default.ArrowDropDown,
+                            contentDescription = "Select dates",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                readOnly = true,
+                shape = RoundedCornerShape(8.dp),
+                colors = TextFieldDefaults.outlinedTextFieldColors(
+                    disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                    disabledBorderColor = MaterialTheme.colorScheme.outline,
+                    disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    disabledLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+
             }
 
             // Departure city input
@@ -250,11 +263,11 @@ fun HomeScreen(
                     readOnly = true,
                     shape = RoundedCornerShape(8.dp),
                     colors = TextFieldDefaults.outlinedTextFieldColors(
-                        disabledTextColor = Color.Black,
-                        disabledBorderColor = Color.LightGray,
-                        disabledPlaceholderColor = Color.Gray,
-                        disabledLeadingIconColor = Color.DarkGray,
-                        disabledTrailingIconColor = Color.DarkGray
+                        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                        disabledBorderColor = MaterialTheme.colorScheme.outline,
+                        disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        disabledLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )

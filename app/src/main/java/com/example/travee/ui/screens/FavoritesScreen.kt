@@ -73,11 +73,12 @@ fun FavoritesScreen(
                 title = {
                     Text(
                         text = "My Favorite Flights",
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary
                     )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.White
+                    containerColor = MaterialTheme.colorScheme.primary
                 )
             )
         },
@@ -296,8 +297,7 @@ fun FavoriteFlightCard(
             .fillMaxWidth()
             .clickable(onClick = onCardClick),
         shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Box(
             modifier = Modifier.fillMaxWidth()
@@ -332,7 +332,6 @@ fun FavoriteFlightCard(
                         onClick = onRemoveClick,
                         modifier = Modifier
                             .size(40.dp)
-                            .background(Color(0xFFFFEBEE), CircleShape)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Favorite,

@@ -51,7 +51,8 @@ fun TravelAppTheme(
     content: @Composable () -> Unit
 ) {
     val darkTheme by themeManager.isDarkTheme.collectAsState()
-    val dynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val dynamicColor = false
+
 
     val colorScheme = when {
         dynamicColor && darkTheme -> {

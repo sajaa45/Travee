@@ -25,6 +25,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavController
 import com.example.travee.R
 import com.example.travee.data.models.FavoriteFlight
+import com.example.travee.navigation.navigateWithSaveState
 import com.example.travee.service.GroqApiService
 import com.example.travee.ui.components.BottomNavBar
 import com.google.firebase.auth.FirebaseAuth
@@ -132,31 +133,50 @@ fun SingleFlightDetailsScreen(
                         Icon(
                             painter = painterResource(id = R.drawable.vector),
                             contentDescription = "Flight",
-                            tint = Color.Black
+                            tint = MaterialTheme.colorScheme.onPrimary  // Use onPrimary for icon tint on primary container
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Flight Details",
-                            color = Color.Black,
+                            color = MaterialTheme.colorScheme.onPrimary,  // Text color on primary container
                             fontWeight = FontWeight.Medium
                         )
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
+                    IconButton(
+                        onClick = {
+                            // Get the previous screen from the navigation arguments or a saved state
+                            val previousRoute = navController.previousBackStackEntry?.destination?.route
+
+                            when {
+                                previousRoute?.startsWith("favorites") == true ->
+                                    navController.navigate("favorites") {
+                                        popUpTo("favorites") { inclusive = false }
+                                    }
+                                else ->
+                                    // Navigate to flight_details with the specified parameters
+                                    navController.navigateWithSaveState(
+                                        "flight_details?budget=1000.0" +
+                                                "&departureCountry=tunisia" +
+                                                "&tripDays=7" +
+                                                "&departDate=${LocalDate.now().plusDays(30).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))}"
+                                    )
+                            }
+                        }
+                    ) {
                         Icon(
                             imageVector = Icons.Default.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onPrimary
                         )
                     }
-                },
-                actions = {
-                    // Favorite button in the app bar
+                },actions = {
                     if (isCheckingFavorite) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(24.dp),
                             strokeWidth = 2.dp,
-                            color = Color.Gray
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)  // lighter color for indicator
                         )
                     } else {
                         IconButton(
@@ -181,19 +201,19 @@ fun SingleFlightDetailsScreen(
                             Icon(
                                 imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.Favorite,
                                 contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
-                                tint = if (isFavorite) Color.Red else Color.Gray
+                                tint = if (isFavorite) Color.Red else MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
                             )
                         }
                     }
-
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.White
+                    containerColor = MaterialTheme.colorScheme.primary  // Use primary color container for dark and light mode
                 )
             )
         },
         bottomBar = { BottomNavBar(navController = navController, selectedItem = 0) }
-    ) { paddingValues ->
+    )
+    { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()

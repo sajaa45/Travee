@@ -10,7 +10,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 
-class SkyScannerApiService {
+class AviasalesApiService {
 
     // Enhanced country to airport mapping with Tunisian focus
     private val countryToAirport = mapOf(
@@ -158,7 +158,7 @@ class SkyScannerApiService {
         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
         val validDepartDate = try {
             // Log the received departure date for debugging
-            Log.d("SkyScannerAPI", "Received departure date: $departDate")
+            Log.d("AviasalesAPI", "Received departure date: $departDate")
 
             // Parse the date to validate it
             val parsedDate = LocalDate.parse(departDate, formatter)
@@ -167,7 +167,7 @@ class SkyScannerApiService {
             parsedDate.format(formatter)
         } catch (e: DateTimeParseException) {
             // If parsing fails, log the error and use today's date as fallback
-            Log.e("SkyScannerAPI", "Error parsing departure date: $departDate", e)
+            Log.e("AviasalesAPI", "Error parsing departure date: $departDate", e)
             LocalDate.now().format(formatter)
         }
 
@@ -177,17 +177,17 @@ class SkyScannerApiService {
             parsedDepartDate.plusDays(days.toLong()).format(formatter)
         } catch (e: Exception) {
             // Fallback if calculation fails
-            Log.e("SkyScannerAPI", "Error calculating return date", e)
+            Log.e("AviasalesAPI", "Error calculating return date", e)
             LocalDate.now().plusDays(days.toLong()).format(formatter)
         }
 
-        Log.d("SkyScannerAPI", "Using departure date: $validDepartDate, return date: $returnDate")
+        Log.d("AviasalesAPI", "Using departure date: $validDepartDate, return date: $returnDate")
 
         try {
             val urlStr = "https://api.travelpayouts.com/aviasales/v3/prices_for_dates" +
                     "?origin=$origin&currency=tnd&depart_date=$validDepartDate&return_date=$returnDate&trip_class=0&token=bb77b690cfa4857ad0a39521cb7bcc19"
 
-            Log.d("SkyScannerAPI", "API URL: $urlStr")
+            Log.d("AviasalesAPI", "API URL: $urlStr")
 
             val url = URL(urlStr)
             val conn = url.openConnection() as HttpURLConnection
@@ -201,7 +201,7 @@ class SkyScannerApiService {
             val results = mutableListOf<FlightResult>()
             if (data.has("data")) {
                 val flights = data.getJSONArray("data")
-                Log.d("SkyScannerAPI", "Received ${flights.length()} flights from API")
+                Log.d("AviasalesAPI", "Received ${flights.length()} flights from API")
 
                 for (i in 0 until flights.length()) {
                     val flight = flights.getJSONObject(i)
@@ -243,7 +243,7 @@ class SkyScannerApiService {
                             flightReturnAt
                         }
 
-                        Log.d("SkyScannerAPI", "Flight to $city: departure=$actualDepartureAt, return=$actualReturnAt")
+                        Log.d("AviasalesAPI", "Flight to $city: departure=$actualDepartureAt, return=$actualReturnAt")
 
                         // Prioritize preferred airlines
                         if (airlineName in preferredAirlines) {
@@ -264,7 +264,7 @@ class SkyScannerApiService {
                     }
                 }
             } else {
-                Log.d("SkyScannerAPI", "No data field in API response")
+                Log.d("AviasalesAPI", "No data field in API response")
             }
 
             // Sort by price and prioritize Tunisian airlines
@@ -273,11 +273,11 @@ class SkyScannerApiService {
                 { it.price } // Then by price
             ))
 
-            Log.d("SkyScannerAPI", "Returning ${sortedResults.size} flight results")
+            Log.d("AviasalesAPI", "Returning ${sortedResults.size} flight results")
             sortedResults
         } catch (e: Exception) {
             // If API fails, log the error and return empty list
-            Log.e("SkyScannerAPI", "Error searching flights", e)
+            Log.e("AviasalesAPI", "Error searching flights", e)
             emptyList()
         }
     }

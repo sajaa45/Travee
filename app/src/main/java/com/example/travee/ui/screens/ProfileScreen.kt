@@ -141,10 +141,11 @@ fun ProfileScreen(
                                 showAvatarDialog = true
                             }
                     ) {
+                        val defaultAvatarUrl ="https://i.ebayimg.com/images/g/AxUAAOSw0t9f26n8/s-l1200.jpg"
                         // Profile image
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
-                                .data(userProfile?.getAvatarUrl())
+                                .data(userProfile?.photoUrl.takeIf { !it.isNullOrEmpty() } ?: defaultAvatarUrl)
                                 .crossfade(true)
                                 .build(),
                             contentDescription = "Profile Picture",

@@ -90,12 +90,15 @@ fun SignupScreen(navController: NavController, auth: FirebaseAuth,
             .addOnCompleteListener { task ->
                 isLoading = false
                 if (task.isSuccessful) {
+                    val defaultProfileImageUrl ="https://i.ebayimg.com/images/g/AxUAAOSw0t9f26n8/s-l1200.jpg"
                     // Store additional user data in Firestore
                     val user = hashMapOf(
                         "firstName" to firstName,
                         "lastName" to lastName,
                         "username" to username,
                         "email" to email,
+                        "photoUrl" to defaultProfileImageUrl,
+                        "avatarUrl" to defaultProfileImageUrl,
                         "createdAt" to FieldValue.serverTimestamp()
                     )
 

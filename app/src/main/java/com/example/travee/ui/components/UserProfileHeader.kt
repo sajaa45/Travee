@@ -1,6 +1,5 @@
 package com.example.travee.ui.components
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
@@ -21,6 +20,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import android.util.Log
 
 @Composable
 fun UserProfileHeader(
@@ -30,6 +30,8 @@ fun UserProfileHeader(
     var userProfile by remember { mutableStateOf<UserProfile?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     val coroutineScope = rememberCoroutineScope()
+    val defaultImageUrl = "https://i.ebayimg.com/images/g/AxUAAOSw0t9f26n8/s-l1200.jpg"
+    var profileImageUrl by remember { mutableStateOf(defaultImageUrl) }
 
     // Load user profile
     LaunchedEffect(key1 = auth.currentUser?.uid) {
@@ -43,14 +45,29 @@ fun UserProfileHeader(
                         .await()
 
                     if (document.exists()) {
+                        // Debug: Log the document data to see what's actually stored
+                        Log.d("UserProfileHeader", "Document data: ${document.data}")
+
+                        // Check for both photoUrl and avatarUrl fields
+                        val photoUrl = document.getString("photoUrl")
+                        val avatarUrl = document.getString("avatarUrl")
+
+                        // Use whichever is not null or empty, with preference for photoUrl
+                        profileImageUrl = when {
+                            !photoUrl.isNullOrEmpty() -> photoUrl
+                            !avatarUrl.isNullOrEmpty() -> avatarUrl
+                            else -> defaultImageUrl
+                        }
+
+                        Log.d("UserProfileHeader", "Using profile image URL: $profileImageUrl")
+
                         // User profile exists in Firestore
                         val profile = document.toObject(UserProfile::class.java)
-                            ?.copy(
-                                userId = auth.currentUser!!.uid,
-                                email = auth.currentUser!!.email ?: "",
-                                photoUrl = auth.currentUser!!.photoUrl?.toString() ?: ""
-                            )
-                        userProfile = profile
+                        userProfile = profile?.copy(
+                            userId = auth.currentUser!!.uid,
+                            email = auth.currentUser!!.email ?: "",
+                            photoUrl = profileImageUrl
+                        )
                     } else {
                         // Create default profile
                         val displayName = auth.currentUser!!.displayName ?: ""
@@ -63,11 +80,12 @@ fun UserProfileHeader(
                             firstName = firstName,
                             lastName = lastName,
                             email = auth.currentUser!!.email ?: "",
-                            photoUrl = auth.currentUser!!.photoUrl?.toString() ?: "",
+                            photoUrl = defaultImageUrl,
                             phoneNumber = auth.currentUser!!.phoneNumber ?: ""
                         )
                     }
                 } catch (e: Exception) {
+                    Log.e("UserProfileHeader", "Error loading profile", e)
                     // Create a basic profile from auth data
                     val displayName = auth.currentUser!!.displayName ?: ""
                     val nameParts = displayName.split(" ")
@@ -76,12 +94,13 @@ fun UserProfileHeader(
                     userProfile = UserProfile(
                         userId = auth.currentUser!!.uid,
                         firstName = firstName,
-                        email = auth.currentUser!!.email ?: ""
+                        email = auth.currentUser!!.email ?: "",
+                        photoUrl = defaultImageUrl
                     )
                 }
             } else {
                 // Not logged in, use default profile
-                userProfile = UserProfile(firstName = "Guest")
+                userProfile = UserProfile(firstName = "Guest", photoUrl = defaultImageUrl)
             }
             isLoading = false
         }
@@ -108,16 +127,22 @@ fun UserProfileHeader(
             )
         }
 
+        // Use the profileImageUrl directly instead of relying on userProfile?.getAvatarUrl()
         AsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
-                .data(if (isLoading) null else userProfile?.getAvatarUrl())
+                .data(profileImageUrl)
                 .crossfade(true)
                 .build(),
             contentDescription = "Profile Image",
             modifier = Modifier
                 .size(48.dp)
                 .clip(CircleShape),
-            contentScale = ContentScale.Crop
+            contentScale = ContentScale.Crop,
+            onError = {
+                // If loading fails, update to use default image
+                profileImageUrl = defaultImageUrl
+                Log.e("UserProfileHeader", "Error loading image, falling back to default")
+            }
         )
     }
 }

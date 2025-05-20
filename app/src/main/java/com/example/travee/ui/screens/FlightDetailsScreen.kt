@@ -30,7 +30,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.travee.R
 import com.example.travee.navigation.navigateWithSaveState
-import com.example.travee.service.SkyScannerApiService
+import com.example.travee.service.AviasalesApiService
 import com.example.travee.ui.components.BottomNavBar
 import com.example.travee.viewmodel.SharedViewModel
 import kotlinx.coroutines.delay
@@ -50,8 +50,8 @@ fun FlightDetailsScreen(
     departDate: String = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
     sharedViewModel: SharedViewModel = viewModel()
 ) {
-    val skyScannerApiService = remember { SkyScannerApiService() }
-    var flightResults by remember { mutableStateOf<List<SkyScannerApiService.FlightResult>>(emptyList()) }
+    val AviasalesApiService = remember { AviasalesApiService() }
+    var flightResults by remember { mutableStateOf<List<AviasalesApiService.FlightResult>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
@@ -78,7 +78,7 @@ fun FlightDetailsScreen(
     // Search functionality
     var showSearchDialog by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
-    var filteredResults by remember { mutableStateOf<List<SkyScannerApiService.FlightResult>>(emptyList()) }
+    var filteredResults by remember { mutableStateOf<List<AviasalesApiService.FlightResult>>(emptyList()) }
 
     // Format dates for display
     val departDateFormatted = remember(departDate) {
@@ -110,7 +110,7 @@ fun FlightDetailsScreen(
 
         try {
             Log.d("FlightDetails", "Searching flights with: $departureCountry, $budget, $tripDays, $departDate")
-            val results = skyScannerApiService.searchFlights(
+            val results = AviasalesApiService.searchFlights(
                 originCountry = departureCountry,
                 budget = budget,
                 days = tripDays,
@@ -151,21 +151,22 @@ fun FlightDetailsScreen(
                         Icon(
                             painter = painterResource(id = R.drawable.vector),
                             contentDescription = "Flight",
-                            tint = Color.Black
+                            tint = MaterialTheme.colorScheme.onPrimary
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Flight Results",
-                            color = Color.Black,
+                            color = MaterialTheme.colorScheme.onPrimary,
                             fontWeight = FontWeight.Medium
                         )
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
+                    IconButton(onClick = { navController.navigate("home") }) {
                         Icon(
                             imageVector = Icons.Default.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.onPrimary
                         )
                     }
                 },
@@ -176,17 +177,23 @@ fun FlightDetailsScreen(
                     }) {
                         Icon(
                             painter = painterResource(id = R.drawable.search),
-                            contentDescription = "Search"
+                            contentDescription = "Search",
+                            tint = MaterialTheme.colorScheme.onPrimary
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.White
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
                 )
             )
         },
         bottomBar = { BottomNavBar(navController = navController, selectedItem = 1) }
-    ) { paddingValues ->
+    )
+
+    { paddingValues ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -217,7 +224,7 @@ fun FlightDetailsScreen(
                                 isLoading = true
                                 errorMessage = null
                                 try {
-                                    val results = skyScannerApiService.searchFlights(
+                                    val results = AviasalesApiService.searchFlights(
                                         originCountry = departureCountry,
                                         budget = budget,
                                         days = tripDays,
@@ -366,8 +373,8 @@ fun SearchDialog(
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     onDismiss: () -> Unit,
-    filteredResults: List<SkyScannerApiService.FlightResult>,
-    onFlightSelected: (SkyScannerApiService.FlightResult) -> Unit
+    filteredResults: List<AviasalesApiService.FlightResult>,
+    onFlightSelected: (AviasalesApiService.FlightResult) -> Unit
 ) {
     val focusRequester = remember { FocusRequester() }
 
@@ -496,7 +503,7 @@ fun SearchDialog(
 
 @Composable
 fun SearchResultItem(
-    flight: SkyScannerApiService.FlightResult,
+    flight: AviasalesApiService.FlightResult,
     searchQuery: String,
     onClick: () -> Unit
 ) {
@@ -564,7 +571,7 @@ fun SearchResultItem(
 
 @Composable
 fun FlightResultCard(
-    flight: SkyScannerApiService.FlightResult,
+    flight: AviasalesApiService.FlightResult,
     onDetailsClick: () -> Unit
 ) {
     Card(
